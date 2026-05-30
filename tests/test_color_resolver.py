@@ -16,12 +16,15 @@ definitions) and are NOT covered by ColorResolver. See NOTES.md.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
+import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import pytest
 
-from ondeck.parse.color import ColorResolver, NS, parse_theme_xml
+from ondeck.parse.color import ColorResolver, NS, parse_theme_xml, theme_from_pptx
 
 FIXTURES = Path(__file__).resolve().parent.parent / "phase_1c" / "fixtures"
 
@@ -242,3 +245,83 @@ def test_parse_theme_xml_demert_default_office():
     result = parse_theme_xml(xml)
 
     assert result == expected["expected_theme_dict"]
+
+
+# ---------------------------------------------------------------------------
+# theme_shelfbeauty: real SHELF beauty deck, two themes (theme_from_pptx path)
+# ---------------------------------------------------------------------------
+
+# Ground-truth scheme dict for theme1 of the real SHELF beauty deck. theme1 is
+# the theme theme_from_pptx() selects (it sorts theme names and takes [0]).
+_SHELF_THEME1_EXPECTED = {
+    "dk1": "#000000",
+    "lt1": "#FFFFFF",
+    "dk2": "#44546A",
+    "lt2": "#E7E6E6",
+    "accent1": "#4472C4",
+    "accent2": "#ED7D31",
+    "accent3": "#A5A5A5",
+    "accent4": "#FFC000",
+    "accent5": "#5B9BD5",
+    "accent6": "#70AD47",
+    "hlink": "#0563C1",
+    "folHlink": "#954F72",
+}
+
+
+def test_parse_theme_xml_shelfbeauty_theme1():
+    """Lock parse_theme_xml() on a real, previously-unseen multi-theme deck.
+
+    theme1 from the SHELF beauty deck: dk1/lt1 via sysClr lastClr, the rest
+    srgbClr. This is the theme theme_from_pptx() picks from that deck.
+    """
+    root = _load_xml("theme_shelfbeauty_theme1.xml")
+
+    result = parse_theme_xml(root)
+
+    assert result == _SHELF_THEME1_EXPECTED
+
+
+# Minimal-but-valid theme XML: a:theme > a:themeElements > a:clrScheme with the
+# 12 standard children. dk1/lt1 use sysClr lastClr; the rest srgbClr. accent1 is
+# parameterized so the two synthetic themes differ in a way that proves which is
+# selected.
+_MINIMAL_THEME_TMPL = (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+    ' name="Synthetic"><a:themeElements><a:clrScheme name="Synthetic">'
+    '<a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>'
+    '<a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>'
+    '<a:dk2><a:srgbClr val="44546A"/></a:dk2>'
+    '<a:lt2><a:srgbClr val="E7E6E6"/></a:lt2>'
+    '<a:accent1><a:srgbClr val="{accent1}"/></a:accent1>'
+    '<a:accent2><a:srgbClr val="ED7D31"/></a:accent2>'
+    '<a:accent3><a:srgbClr val="A5A5A5"/></a:accent3>'
+    '<a:accent4><a:srgbClr val="FFC000"/></a:accent4>'
+    '<a:accent5><a:srgbClr val="5B9BD5"/></a:accent5>'
+    '<a:accent6><a:srgbClr val="70AD47"/></a:accent6>'
+    '<a:hlink><a:srgbClr val="0563C1"/></a:hlink>'
+    '<a:folHlink><a:srgbClr val="954F72"/></a:folHlink>'
+    '</a:clrScheme></a:themeElements></a:theme>'
+)
+
+
+def test_theme_from_pptx_selects_theme1_from_multi_theme():
+    """theme_from_pptx() must pick theme1.xml (sort()+[0]), not theme2.xml.
+
+    Build a synthetic .pptx (a zip) at test time with two themes whose
+    clrSchemes differ only in accent1 — theme1 => #111111, theme2 => #222222.
+    A correct selection returns accent1 == #111111.
+    """
+    fd, pptx_path = tempfile.mkstemp(suffix=".pptx")
+    os.close(fd)
+    try:
+        with zipfile.ZipFile(pptx_path, "w") as z:
+            z.writestr("ppt/theme/theme1.xml", _MINIMAL_THEME_TMPL.format(accent1="111111"))
+            z.writestr("ppt/theme/theme2.xml", _MINIMAL_THEME_TMPL.format(accent1="222222"))
+
+        theme = theme_from_pptx(pptx_path)
+
+        assert theme["accent1"] == "#111111"
+    finally:
+        os.remove(pptx_path)
