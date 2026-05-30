@@ -1,0 +1,880 @@
+{
+  "deck_name": "P&G Creative Deck",
+  "source_pptx": "4f8d0812-4135-4589-9535-03a2ebd1b9e7.pptx",
+  "deck_brand_color": "#00B0F0",
+  "templates": [
+    "cover",
+    "title_stats",
+    "card_grid",
+    "section_divider",
+    "media_showcase",
+    "two_column"
+  ],
+  "slides": {
+    "1": {
+      "template": "cover",
+      "notes": "Title slide. GIF logo SVG hero on left, 'CREATIVE DECK' / 'Q1-Q3 2025' on right.",
+      "expected_assets": {
+        "hero": 1,
+        "logo": 1
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "11",
+            "filename": "pg_creative_deck_slide_01_img_01.webp",
+            "format": "webp",
+            "width": 126,
+            "height": 46
+          }
+        ]
+      }
+    },
+    "2": {
+      "template": "card_grid",
+      "notes": "BRANDS WE ARE WORKING WITH — title + 9 brand logos at deck-author absolute positions inside a 4-deep nested group (Group 59 → Group 58/Group 54 → Group 57 → Group 55/Group 56 → leaf pics). 8 unique image files (image4.png-image11.png), image6.png referenced twice (Picture 44 + Picture 45, both at depth 4). All 9 brand logos PNG/RGBA with α=0 transparent backgrounds — alpha must survive inline transport. Logos at depth 2: Picture 43 (image4), Picture 37 (image8), Picture 41 (image9), Picture 49 (image10), Picture 51 (image11). Logos at depth 4: Picture 39 (image5), Picture 44 (image6), Picture 45 (image6 dup), Picture 47 (image7). First real test of depth-4 transform composition via _walk + _descend_group flattener — verified post-audit: Picture 39 raw OOXML (2.85, 1.79) inches resolves to world (520, 189) codebase-pt through 4 nested group transforms. Top-level chrome: Picture 3 (image2.png, 127×46) at (1129, 33). Title TextBox 2 'BRANDS WE ARE WORKING WITH' (sz=2400 explicit = 24pt, algn=ctr, Univers Condensed → weight 500, txBox=1, at (234, 79) 813×48). Skip Rectangle 1 (full-canvas cyan, redundant with canvas_bg — handled at classify time). Skip Picture 62 (image3.jpeg, 1246×684 occluded background at (17, 14) — never visible since Rectangle 1 covers it; emitted-skip at render time, not skipped at transform time so the webp still exists in out/). Validator: expected photo_grid=8 (unique-source count, NOT element count) — image6 dupe collapses to 1 unique src in the validator's set-based scan, so 9 emitted elements → 8 unique. Cohort B8 — NEW card_grid template required.",
+      "hints": {
+        "canvas_bg": "#00B0F0",
+        "logo_invert": true,
+        "title_size_pt": 32,
+        "mobile_title_size_vw": 12.0,
+        "mobile_title_weight": 500,
+        "mobile_title_line_height": 1.05
+      },
+      "expected_assets": {
+        "logo": 1,
+        "photo_grid": 8,
+        "photo_bg": 1
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "63",
+            "filename": "pg_creative_deck_slide_02_img_01.webp",
+            "format": "webp",
+            "width": 612,
+            "height": 335
+          },
+          {
+            "src_id": "4",
+            "filename": "pg_creative_deck_slide_02_img_02.webp",
+            "format": "webp",
+            "width": 126,
+            "height": 46
+          },
+          {
+            "src_id": "44",
+            "filename": "pg_creative_deck_slide_02_img_03.webp",
+            "format": "webp",
+            "width": 234,
+            "height": 234
+          },
+          {
+            "src_id": "40",
+            "filename": "pg_creative_deck_slide_02_img_04.webp",
+            "format": "webp",
+            "width": 257,
+            "height": 257
+          },
+          {
+            "src_id": "45",
+            "filename": "pg_creative_deck_slide_02_img_05.webp",
+            "format": "webp",
+            "width": 193,
+            "height": 193
+          },
+          {
+            "src_id": "46",
+            "filename": "pg_creative_deck_slide_02_img_06.webp",
+            "format": "webp",
+            "width": 193,
+            "height": 193
+          },
+          {
+            "src_id": "48",
+            "filename": "pg_creative_deck_slide_02_img_07.webp",
+            "format": "webp",
+            "width": 175,
+            "height": 175
+          },
+          {
+            "src_id": "38",
+            "filename": "pg_creative_deck_slide_02_img_08.webp",
+            "format": "webp",
+            "width": 257,
+            "height": 257
+          },
+          {
+            "src_id": "42",
+            "filename": "pg_creative_deck_slide_02_img_09.webp",
+            "format": "webp",
+            "width": 257,
+            "height": 257
+          },
+          {
+            "src_id": "50",
+            "filename": "pg_creative_deck_slide_02_img_10.webp",
+            "format": "webp",
+            "width": 212,
+            "height": 212
+          },
+          {
+            "src_id": "52",
+            "filename": "pg_creative_deck_slide_02_img_11.webp",
+            "format": "webp",
+            "width": 257,
+            "height": 257
+          }
+        ]
+      }
+    },
+    "3": {
+      "template": "title_stats",
+      "notes": "TYPE OF BRAND ASSETS CREATED — text-heavy list of asset types, no showcase imagery.",
+      "hints": {
+        "title_size_pt": 60,
+        "heading_size_pt": 22,
+        "logo_invert": true
+      },
+      "expected_assets": {
+        "logo": 1
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "11",
+            "filename": "pg_creative_deck_slide_03_img_01.webp",
+            "format": "webp",
+            "width": 126,
+            "height": 46
+          }
+        ]
+      }
+    },
+    "4": {
+      "template": "section_divider",
+      "notes": "RETAIL / WOW DISPLAYS — 2-line ALL CAPS over full-bleed photo bg.",
+      "hints": {
+        "logo_invert": true
+      },
+      "expected_assets": {
+        "photo_bg": 1,
+        "logo": 1
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "3",
+            "filename": "pg_creative_deck_slide_04_img_01.webp",
+            "format": "webp",
+            "width": 1239,
+            "height": 684
+          },
+          {
+            "src_id": "6",
+            "filename": "pg_creative_deck_slide_04_img_02.webp",
+            "format": "webp",
+            "width": 126,
+            "height": 46
+          }
+        ]
+      }
+    },
+    "5": {
+      "template": "section_divider",
+      "hints": {
+        "headline_class": "t-wnba",
+        "canvas_bg": "#FFFFFF",
+        "logo_invert": true
+      },
+      "notes": "WNBA / Theme design — uses the special t-wnba styling on the headline (slide-specific override). Canvas is white (photo grid covers full canvas; cyan seam visible at subpixel boundaries otherwise).",
+      "expected_assets": {
+        "photo_grid": 4,
+        "logo": 1
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "7",
+            "filename": "pg_creative_deck_slide_05_img_01.webp",
+            "format": "webp",
+            "width": 640,
+            "height": 360
+          },
+          {
+            "src_id": "3",
+            "filename": "pg_creative_deck_slide_05_img_02.webp",
+            "format": "webp",
+            "width": 640,
+            "height": 360
+          },
+          {
+            "src_id": "5",
+            "filename": "pg_creative_deck_slide_05_img_03.webp",
+            "format": "webp",
+            "width": 640,
+            "height": 360
+          },
+          {
+            "src_id": "9",
+            "filename": "pg_creative_deck_slide_05_img_04.webp",
+            "format": "webp",
+            "width": 640,
+            "height": 360
+          },
+          {
+            "src_id": "10",
+            "filename": "pg_creative_deck_slide_05_img_05.webp",
+            "format": "webp",
+            "width": 126,
+            "height": 46
+          }
+        ]
+      }
+    },
+    "6": {
+      "template": "media_showcase",
+      "hints": {
+        "headline_class": "t-bold",
+        "canvas_bg": "#FFFFFF",
+        "logo_invert": true
+      },
+      "notes": "Wicked 2 / Promo / Cobranded — 4 photos arranged 2×2 (each 640×360) tiling the canvas. Canvas is white (same reason as slide 5).",
+      "expected_assets": {
+        "photo_grid": 4,
+        "logo": 1
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "3",
+            "filename": "pg_creative_deck_slide_06_img_01.webp",
+            "format": "webp",
+            "width": 1600,
+            "height": 900
+          },
+          {
+            "src_id": "5",
+            "filename": "pg_creative_deck_slide_06_img_02.webp",
+            "format": "webp",
+            "width": 1600,
+            "height": 900
+          },
+          {
+            "src_id": "7",
+            "filename": "pg_creative_deck_slide_06_img_03.webp",
+            "format": "webp",
+            "width": 1600,
+            "height": 900
+          },
+          {
+            "src_id": "9",
+            "filename": "pg_creative_deck_slide_06_img_04.webp",
+            "format": "webp",
+            "width": 1600,
+            "height": 900
+          },
+          {
+            "src_id": "10",
+            "filename": "pg_creative_deck_slide_06_img_05.webp",
+            "format": "webp",
+            "width": 278,
+            "height": 102
+          }
+        ]
+      }
+    },
+    "7": {
+      "template": "media_showcase",
+      "hints": {
+        "headline_class": "t-bold",
+        "canvas_bg": "#FFFFFF",
+        "logo_invert": true
+      },
+      "notes": "Wicked 2 / Promo / Cobranded Theme design — full-bleed video at z=0 (1280×720). Mobile uses 16:9 contain (not bundle's 4:5 cover) — video has edge-content wordmarks that 4:5 cover would crop.",
+      "expected_assets": {
+        "video": 1,
+        "video_poster": 1,
+        "logo": 1
+      },
+      "media": {
+        "video": {
+          "aspect": "16/9",
+          "width": 1920,
+          "height": 1080,
+          "filename": "pg_creative_deck_slide_07_video.mp4"
+        },
+        "images": [
+          {
+            "src_id": "3",
+            "filename": "pg_creative_deck_slide_07_img_01.webp",
+            "format": "webp",
+            "width": 278,
+            "height": 102
+          }
+        ]
+      }
+    },
+    "8": {
+      "template": "section_divider",
+      "notes": "RETAIL / SHELF / UNITS — three-line stacked headline at 88pt.",
+      "expected_assets": {
+        "photo_bg": 1
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "3",
+            "filename": "pg_creative_deck_slide_08_img_01.webp",
+            "format": "webp",
+            "width": 1238,
+            "height": 683
+          }
+        ]
+      }
+    },
+    "9": {
+      "template": "media_showcase",
+      "notes": "Concept / Adapts / For BIC / Shelves — 3 photos in 1x3 strip (each ~321x540pt, full canvas height; P3 overlaps P2 by ~27pt per source authoring quirk, leaving ~27pt white on right edge). Cyan circle badge (113pt) at top straddling P1/P2 seam, white text overlay (Univers Condensed: 'Concept' bold + 'Adapts' bold + 'For BIC' 14pt + 'Shelves' 14pt — 4 paragraphs → compact mobile branch). Logo top-right.",
+      "hints": {
+        "canvas_bg": "#FFFFFF",
+        "logo_invert": true
+      },
+      "expected_assets": {
+        "photo_grid": 3,
+        "logo": 1
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "7",
+            "filename": "pg_creative_deck_slide_09_img_01.webp",
+            "format": "webp",
+            "width": 426,
+            "height": 720
+          },
+          {
+            "src_id": "3",
+            "filename": "pg_creative_deck_slide_09_img_02.webp",
+            "format": "webp",
+            "width": 427,
+            "height": 720
+          },
+          {
+            "src_id": "5",
+            "filename": "pg_creative_deck_slide_09_img_03.webp",
+            "format": "webp",
+            "width": 427,
+            "height": 720
+          },
+          {
+            "src_id": "8",
+            "filename": "pg_creative_deck_slide_09_img_04.webp",
+            "format": "webp",
+            "width": 126,
+            "height": 46
+          }
+        ]
+      }
+    },
+    "10": {
+      "template": "section_divider",
+      "notes": "DESIGN / DIELINES / ARTWORK — 3-line ALL CAPS over full-bleed photo bg.",
+      "expected_assets": {
+        "photo_bg": 1
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "3",
+            "filename": "pg_creative_deck_slide_10_img_01.webp",
+            "format": "webp",
+            "width": 1240,
+            "height": 683
+          }
+        ]
+      }
+    },
+    "11": {
+      "template": "media_showcase",
+      "notes": "Concept / Designs & Artwork / Pratt retail — 8 product photos in tile arrangement.",
+      "hints": {
+        "canvas_bg": "#FFFFFF",
+        "logo_invert": false,
+        "mobile_photo_layout": "stack"
+      },
+      "expected_assets": {
+        "photo_grid": 8,
+        "logo": 1
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "2",
+            "filename": "pg_creative_deck_slide_11_img_01.webp",
+            "format": "webp",
+            "width": 126,
+            "height": 46
+          },
+          {
+            "src_id": "3",
+            "filename": "pg_creative_deck_slide_11_img_02.webp",
+            "format": "webp",
+            "width": 299,
+            "height": 336
+          },
+          {
+            "src_id": "5",
+            "filename": "pg_creative_deck_slide_11_img_03.webp",
+            "format": "webp",
+            "width": 580,
+            "height": 325
+          },
+          {
+            "src_id": "7",
+            "filename": "pg_creative_deck_slide_11_img_04.webp",
+            "format": "webp",
+            "width": 390,
+            "height": 206
+          },
+          {
+            "src_id": "9",
+            "filename": "pg_creative_deck_slide_11_img_05.webp",
+            "format": "webp",
+            "width": 172,
+            "height": 214
+          },
+          {
+            "src_id": "11",
+            "filename": "pg_creative_deck_slide_11_img_06.webp",
+            "format": "webp",
+            "width": 244,
+            "height": 344
+          },
+          {
+            "src_id": "13",
+            "filename": "pg_creative_deck_slide_11_img_07.webp",
+            "format": "webp",
+            "width": 368,
+            "height": 313
+          },
+          {
+            "src_id": "15",
+            "filename": "pg_creative_deck_slide_11_img_08.webp",
+            "format": "webp",
+            "width": 380,
+            "height": 326
+          },
+          {
+            "src_id": "17",
+            "filename": "pg_creative_deck_slide_11_img_09.webp",
+            "format": "webp",
+            "width": 177,
+            "height": 140
+          }
+        ]
+      }
+    },
+    "12": {
+      "template": "media_showcase",
+      "notes": "Concept / Designs & Artwork / Brandsaver catalog — 2 photos side-by-side, half-canvas each.",
+      "hints": {
+        "canvas_bg": "#FFFFFF"
+      },
+      "expected_assets": {
+        "photo_grid": 2
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "11",
+            "filename": "pg_creative_deck_slide_12_img_01.webp",
+            "format": "webp",
+            "width": 419,
+            "height": 679
+          },
+          {
+            "src_id": "13",
+            "filename": "pg_creative_deck_slide_12_img_02.webp",
+            "format": "webp",
+            "width": 709,
+            "height": 690
+          }
+        ]
+      }
+    },
+    "13": {
+      "template": "section_divider",
+      "notes": "PACKAGE / DESIGN / ARTWORK — 3-line ALL CAPS over full-bleed photo bg.",
+      "expected_assets": {
+        "photo_bg": 1
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "3",
+            "filename": "pg_creative_deck_slide_13_img_01.webp",
+            "format": "webp",
+            "width": 1240,
+            "height": 683
+          }
+        ]
+      }
+    },
+    "14": {
+      "template": "media_showcase",
+      "notes": "Concept / Designs & Artwork / WNBA Edition pack — photo_grid badge variant (same archetype as slides 9, 11, 12). 3 photos: img_01 (508x531 WNBA mockup, left third in-canvas), img_02 (770x770 RGBA hard-edge alpha — transparent-edge antiperspirant box mockup, deliberately oversized + off-canvas all 4 sides, z=2 paints over img_01 so its corner transparency reveals img_01's WNBA design behind), img_03 (404x678 right third). Cyan circle badge (113.16pt #00B0F0) + 3 white centered text runs (Univers Condensed: 'Concept' 14pt bold + 'Designs & Artwork' 14pt bold + 'For WNBA Edition pack' 11pt regular). No logo. canvas_bg=#FFFFFF (master default; cyan would clash with img_02 transparent edges). img_02 explicitly carries flatten_on_canvas: false to preserve PNG alpha; on-disk webp confirmed RGBA with 4/4 corners alpha=0.",
+      "hints": {
+        "canvas_bg": "#FFFFFF"
+      },
+      "expected_assets": {
+        "photo_grid": 3
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "10",
+            "filename": "pg_creative_deck_slide_14_img_01.webp",
+            "format": "webp",
+            "width": 508,
+            "height": 531
+          },
+          {
+            "src_id": "5",
+            "filename": "pg_creative_deck_slide_14_img_02.webp",
+            "format": "webp",
+            "width": 770,
+            "height": 770,
+            "flatten_on_canvas": false
+          },
+          {
+            "src_id": "12",
+            "filename": "pg_creative_deck_slide_14_img_03.webp",
+            "format": "webp",
+            "width": 404,
+            "height": 678
+          }
+        ]
+      }
+    },
+    "15": {
+      "template": "media_showcase",
+      "notes": "SPONSORED / BRAND / VIDEOS — 4 photos in 3-column layout (2 tall left + 2 stacked right). Headline pattern looks like section_divider but photos are content, not backdrop.",
+      "expected_assets": {
+        "photo_grid": 4
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "7",
+            "filename": "pg_creative_deck_slide_15_img_01.webp",
+            "format": "webp",
+            "width": 399,
+            "height": 684
+          },
+          {
+            "src_id": "5",
+            "filename": "pg_creative_deck_slide_15_img_02.webp",
+            "format": "webp",
+            "width": 398,
+            "height": 684
+          },
+          {
+            "src_id": "3",
+            "filename": "pg_creative_deck_slide_15_img_03.webp",
+            "format": "webp",
+            "width": 402,
+            "height": 332
+          },
+          {
+            "src_id": "9",
+            "filename": "pg_creative_deck_slide_15_img_04.webp",
+            "format": "webp",
+            "width": 402,
+            "height": 334
+          }
+        ]
+      }
+    },
+    "16": {
+      "template": "media_showcase",
+      "notes": "Video-only slide. Bare video centered on canvas at 81.2%×81.2% (16:9 source). No logo, no badge, no headline. Bundle renders mobile as flex-centered black panel with the video alone — bare-video sub-variant.",
+      "hints": {
+        "canvas_bg": "#FFFFFF"
+      },
+      "expected_assets": {
+        "video": 1,
+        "video_poster": 1
+      },
+      "media": {
+        "video": {
+          "aspect": "16/9",
+          "width": 1920,
+          "height": 1080,
+          "filename": "pg_creative_deck_slide_16_video.mp4"
+        }
+      }
+    },
+    "17": {
+      "template": "media_showcase",
+      "notes": "OMNICHANNEL / META ADS — 5 photos as content (1 tall left + 4 in 2×2 grid right). Stacked CAPS headline labels content, doesn't define a divider.",
+      "expected_assets": {
+        "photo_grid": 5
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "6",
+            "filename": "pg_creative_deck_slide_17_img_01.webp",
+            "format": "webp",
+            "width": 1600,
+            "height": 894
+          },
+          {
+            "src_id": "8",
+            "filename": "pg_creative_deck_slide_17_img_02.webp",
+            "format": "webp",
+            "width": 1600,
+            "height": 896
+          },
+          {
+            "src_id": "14",
+            "filename": "pg_creative_deck_slide_17_img_03.webp",
+            "format": "webp",
+            "width": 1600,
+            "height": 897
+          },
+          {
+            "src_id": "12",
+            "filename": "pg_creative_deck_slide_17_img_04.webp",
+            "format": "webp",
+            "width": 1600,
+            "height": 904
+          },
+          {
+            "src_id": "10",
+            "filename": "pg_creative_deck_slide_17_img_05.webp",
+            "format": "webp",
+            "width": 1600,
+            "height": 904
+          }
+        ]
+      }
+    },
+    "18": {
+      "template": "section_divider",
+      "notes": "CGI SCENES / ENVIRONMENT — 2-line ALL CAPS over full-bleed photo bg.",
+      "expected_assets": {
+        "photo_bg": 1
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "3",
+            "filename": "pg_creative_deck_slide_18_img_01.webp",
+            "format": "webp",
+            "width": 1237,
+            "height": 683
+          }
+        ]
+      }
+    },
+    "19": {
+      "template": "media_showcase",
+      "notes": "IVORY BODYWASH composites — 8 product photos in 4x2 grid (~229pt squares with 6-9pt gaps), title above (Univers Condensed 14pt bold 'IVORY BODYWASH IN BATHROOM ENVIRONMENTS AS COMPOSITES' + 14pt subtitle 'CGI Product model, CGI Scene set up and ambient lighting set up', dark navy #002060, centered). No logo, no circle. Routes to titled-grid sub-variant. Group transform: scale ~1.0, translate dx=+39756 dy=-464021 EMU; flatten_slide resolves child coords to canvas-world before render.",
+      "hints": {
+        "canvas_bg": "#FFFFFF",
+        "media_showcase_layout": "titled-grid"
+      },
+      "expected_assets": {
+        "photo_grid": 8
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "3",
+            "filename": "pg_creative_deck_slide_19_img_01.webp",
+            "format": "webp",
+            "width": 1440,
+            "height": 1440
+          },
+          {
+            "src_id": "5",
+            "filename": "pg_creative_deck_slide_19_img_02.webp",
+            "format": "webp",
+            "width": 1440,
+            "height": 1440
+          },
+          {
+            "src_id": "7",
+            "filename": "pg_creative_deck_slide_19_img_03.webp",
+            "format": "webp",
+            "width": 1440,
+            "height": 1440
+          },
+          {
+            "src_id": "9",
+            "filename": "pg_creative_deck_slide_19_img_04.webp",
+            "format": "webp",
+            "width": 1440,
+            "height": 1440
+          },
+          {
+            "src_id": "11",
+            "filename": "pg_creative_deck_slide_19_img_05.webp",
+            "format": "webp",
+            "width": 1440,
+            "height": 1440
+          },
+          {
+            "src_id": "13",
+            "filename": "pg_creative_deck_slide_19_img_06.webp",
+            "format": "webp",
+            "width": 1440,
+            "height": 1440
+          },
+          {
+            "src_id": "15",
+            "filename": "pg_creative_deck_slide_19_img_07.webp",
+            "format": "webp",
+            "width": 1440,
+            "height": 1440
+          },
+          {
+            "src_id": "17",
+            "filename": "pg_creative_deck_slide_19_img_08.webp",
+            "format": "webp",
+            "width": 1440,
+            "height": 1440
+          }
+        ]
+      }
+    },
+    "20": {
+      "template": "media_showcase",
+      "notes": "IVORY BODYWASH social banners — 5 vertical posters in 1x5 row (~186x331pt with ~4.6pt gaps), title above (same style as slide 19; subtitle 'Assets layout for review based social media banners'). No logo, no circle. Routes to titled-grid sub-variant. Group transform: scale ~0.986, translate dx=+10413 dy=-39009 EMU. mobile_photo_layout=stack hint matches slide-11 portrait-photo pattern (vertical posters in grid-2col would cram).",
+      "hints": {
+        "canvas_bg": "#FFFFFF",
+        "media_showcase_layout": "titled-grid",
+        "mobile_photo_layout": "stack"
+      },
+      "expected_assets": {
+        "photo_grid": 5
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "3",
+            "filename": "pg_creative_deck_slide_20_img_01.webp",
+            "format": "webp",
+            "width": 900,
+            "height": 1600
+          },
+          {
+            "src_id": "5",
+            "filename": "pg_creative_deck_slide_20_img_02.webp",
+            "format": "webp",
+            "width": 900,
+            "height": 1600
+          },
+          {
+            "src_id": "7",
+            "filename": "pg_creative_deck_slide_20_img_03.webp",
+            "format": "webp",
+            "width": 900,
+            "height": 1600
+          },
+          {
+            "src_id": "9",
+            "filename": "pg_creative_deck_slide_20_img_04.webp",
+            "format": "webp",
+            "width": 900,
+            "height": 1600
+          },
+          {
+            "src_id": "11",
+            "filename": "pg_creative_deck_slide_20_img_05.webp",
+            "format": "webp",
+            "width": 900,
+            "height": 1600
+          }
+        ]
+      }
+    },
+    "21": {
+      "template": "title_stats",
+      "notes": "BRAND ASSETS TURNAROUND TIMES — title + 4 entries with dotted-leader timing data.",
+      "hints": {
+        "title_size_pt": 60,
+        "body_size_pt": 20,
+        "logo_invert": true,
+        "hide_footnote": true
+      },
+      "expected_assets": {
+        "logo": 1
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "11",
+            "filename": "pg_creative_deck_slide_21_img_01.webp",
+            "format": "webp",
+            "width": 126,
+            "height": 46
+          }
+        ]
+      }
+    },
+    "22": {
+      "template": "two_column",
+      "notes": "Title 'THANK YOU TO OUR KEY STAKEHOLDERS ACROSS P&G BRANDS' (TextBox 8, sz=4400 explicit, 44pt). Body is 30 names total: 15 left col (TextBox 1) + 15 right col (TextBox 2), both txBox=\"1\" inheriting 18pt from <p:otherStyle>/lvl1. Multi-run paragraphs concatenate to single name: 'Heather GlennGunnarson' (left para 3, 2 runs), 'Damilola Oyebanjo' (right para 2, 3 runs incl. trailing space), 'Rigbe Zemicael' (right para 4, 3 runs incl. interior space), 'Angel\\xa0 Bui' (right para 13, NBSP+space preserved). Trailing whitespace-only runs stripped. Standard top-right GIF chrome (image2.png, 126x46 RGBA). Earlier manifest said '32 names' — corrected to 30.",
+      "hints": {
+        "canvas_bg": "#00B0F0",
+        "title_size_pt": 60,
+        "title_weight": 400,
+        "mobile_title_size_vw": 9.0,
+        "mobile_title_weight": 500,
+        "mobile_title_line_height": 1.05,
+        "body_size_pt": 22,
+        "logo_invert": true
+      },
+      "expected_assets": {
+        "logo": 1
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "11",
+            "filename": "pg_creative_deck_slide_22_img_01.webp",
+            "format": "webp",
+            "width": 126,
+            "height": 46
+          }
+        ]
+      }
+    },
+    "23": {
+      "template": "two_column",
+      "notes": "Closing contact slide. SVG-only Identity hero (Graphic 4 / image1.svg, rId2) at left half (1.11, 1.42, 4.66x4.66\"). GIF wordmark content (Picture 10 / image21.png, rId3, 278x102 RGBA) at right column top (6.71, 1.83, 3.11x1.14\") — NOT chrome, treated as photo_grid content asset; slide 23 has no separate top-right chrome logo. Right column stack: TextBox 1 'FOR BUSINESS QUERIES' (bold, 3.44), TextBox 6 sean@globalimagefactory.com + (305) 927 0049 (3.80, 2 paragraphs), TextBox 3 'FOR CREATIVE PROJECTS' (bold, 4.71), TextBox 7 rajit@globalimagefactory.com + (786) 820 6121 (5.07, 2 paragraphs). All 4 frames txBox=1 (inherit 18pt from <p:otherStyle>/lvl1). Two mailto: hyperlinks (rId4=sean on TextBox 6 para 1, rId5=rajit on TextBox 7 para 1) — render as plain text per Cohort B7 scope (clickability deferred to Phase 2 alongside parse_text_frame hlinkClick extraction). Rectangle 5 = standard full-canvas cyan skip rect (handled by _is_canvas_skip_rect). Cohort B7. Template extension required before render — see B7 work entry: SVG hero classification + wordmark-as-content classification + right-column-stack body emission + (optional Phase 2) hyperlink preservation.",
+      "hints": {
+        "canvas_bg": "#00B0F0",
+        "two_column_layout": "contact"
+      },
+      "expected_assets": {
+        "hero": 1,
+        "photo_grid": 1
+      },
+      "media": {
+        "images": [
+          {
+            "src_id": "11",
+            "filename": "pg_creative_deck_slide_23_img_01.webp",
+            "format": "webp",
+            "width": 278,
+            "height": 102
+          }
+        ]
+      }
+    }
+  }
+}

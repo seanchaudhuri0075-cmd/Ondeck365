@@ -1,0 +1,182 @@
+{
+  "fixture": "theme_fillstyle_0003.xml",
+  "source": "ppt/theme/theme1.xml fmtScheme/fillStyleLst[3] (1-indexed; 0-indexed [2])",
+  "scheme_color": "phClr (resolved as accent1 = #156082 for this fixture)",
+  "note": "stops [1] and [2] use shade, not tint, despite task description saying 'tint per stop'",
+  "input_rgb": [
+    21,
+    96,
+    130
+  ],
+  "input_hex": "#156082",
+  "stops": [
+    {
+      "pos": 0,
+      "transforms": [
+        [
+          "satMod",
+          103000
+        ],
+        [
+          "lumMod",
+          102000
+        ],
+        [
+          "tint",
+          94000
+        ]
+      ],
+      "final_hex": "#F1F6F8",
+      "steps": [
+        {
+          "step": "input (accent1)",
+          "rgb": [
+            21,
+            96,
+            130
+          ],
+          "hex": "#156082"
+        },
+        {
+          "step": "satMod 103000",
+          "rgb": [
+            19.365,
+            96.615,
+            131.635
+          ],
+          "hex": "#136184"
+        },
+        {
+          "step": "lumMod 102000",
+          "rgb": [
+            19.752,
+            98.547,
+            134.268
+          ],
+          "hex": "#146386"
+        },
+        {
+          "step": "tint 94000",
+          "rgb": [
+            240.885,
+            245.613,
+            247.756
+          ],
+          "hex": "#F1F6F8"
+        }
+      ]
+    },
+    {
+      "pos": 50000,
+      "transforms": [
+        [
+          "satMod",
+          110000
+        ],
+        [
+          "lumMod",
+          100000
+        ],
+        [
+          "shade",
+          100000
+        ]
+      ],
+      "final_hex": "#106287",
+      "steps": [
+        {
+          "step": "input (accent1)",
+          "rgb": [
+            21,
+            96,
+            130
+          ],
+          "hex": "#156082"
+        },
+        {
+          "step": "satMod 110000",
+          "rgb": [
+            15.55,
+            98.05,
+            135.45
+          ],
+          "hex": "#106287"
+        },
+        {
+          "step": "lumMod 100000",
+          "rgb": [
+            15.55,
+            98.05,
+            135.45
+          ],
+          "hex": "#106287"
+        },
+        {
+          "step": "shade 100000",
+          "rgb": [
+            15.55,
+            98.05,
+            135.45
+          ],
+          "hex": "#106287"
+        }
+      ]
+    },
+    {
+      "pos": 100000,
+      "transforms": [
+        [
+          "lumMod",
+          99000
+        ],
+        [
+          "satMod",
+          120000
+        ],
+        [
+          "shade",
+          78000
+        ]
+      ],
+      "final_hex": "#084D6D",
+      "steps": [
+        {
+          "step": "input (accent1)",
+          "rgb": [
+            21,
+            96,
+            130
+          ],
+          "hex": "#156082"
+        },
+        {
+          "step": "lumMod 99000",
+          "rgb": [
+            20.79,
+            95.04,
+            128.7
+          ],
+          "hex": "#155F81"
+        },
+        {
+          "step": "satMod 120000",
+          "rgb": [
+            9.999,
+            99.099,
+            139.491
+          ],
+          "hex": "#0A638B"
+        },
+        {
+          "step": "shade 78000",
+          "rgb": [
+            7.799,
+            77.297,
+            108.803
+          ],
+          "hex": "#084D6D"
+        }
+      ]
+    }
+  ]
+}

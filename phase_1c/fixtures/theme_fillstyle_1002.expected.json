@@ -1,0 +1,51 @@
+{
+  "fixture": "theme_fillstyle_1002.xml",
+  "source": "ppt/theme/theme1.xml fmtScheme/bgFillStyleLst[1002] (idx 1002 = bg list entry 2; 0-indexed [1])",
+  "scheme_color": "phClr (resolved as accent1 = #156082 for this fixture)",
+  "input_rgb": [
+    21,
+    96,
+    130
+  ],
+  "input_hex": "#156082",
+  "transforms": [
+    [
+      "tint",
+      95000
+    ],
+    [
+      "satMod",
+      170000
+    ]
+  ],
+  "final_hex": "#F1F8FB",
+  "steps": [
+    {
+      "step": "input (accent1)",
+      "rgb": [
+        21,
+        96,
+        130
+      ],
+      "hex": "#156082"
+    },
+    {
+      "step": "tint 95000",
+      "rgb": [
+        243.3,
+        247.05,
+        248.75
+      ],
+      "hex": "#F3F7F9"
+    },
+    {
+      "step": "satMod 170000",
+      "rgb": [
+        241.393,
+        247.768,
+        250.657
+      ],
+      "hex": "#F1F8FB"
+    }
+  ]
+}

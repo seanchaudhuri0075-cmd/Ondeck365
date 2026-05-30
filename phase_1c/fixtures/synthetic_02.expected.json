@@ -1,0 +1,57 @@
+{
+  "fixture": "synthetic_02.xml",
+  "case": "alpha + lumMod + lumOff stacked on accent1 (color-space crossings: RGB->HSL->RGB; alpha on separate channel)",
+  "scheme_color": "accent1 = #156082",
+  "transforms": [
+    [
+      "lumMod",
+      50000
+    ],
+    [
+      "lumOff",
+      50000
+    ],
+    [
+      "alpha",
+      60000
+    ]
+  ],
+  "final_hex": "#64BEE6",
+  "steps": [
+    {
+      "step": "accent1 #156082",
+      "rgb": [
+        21,
+        96,
+        130
+      ],
+      "hex": "#156082"
+    },
+    {
+      "step": "lumMod 50000",
+      "rgb": [
+        10.5,
+        48.0,
+        65.0
+      ],
+      "hex": "#0B3041"
+    },
+    {
+      "step": "lumOff 50000",
+      "rgb": [
+        100.464,
+        189.619,
+        230.036
+      ],
+      "hex": "#64BEE6"
+    }
+  ],
+  "final_rgb_int": [
+    100,
+    190,
+    230
+  ],
+  "final_alpha": 0.6,
+  "final_rgba": "rgba(100,190,230,0.6)",
+  "audit_chain": "accent1 #156082 -> lumMod 50000 -> #0B3041 -> lumOff 50000 -> #64BEE6 -> alpha 60000 -> rgba(100,190,230,0.6)"
+}

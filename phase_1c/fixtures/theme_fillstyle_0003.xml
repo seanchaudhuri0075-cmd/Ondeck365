@@ -1,0 +1,26 @@
+<a:gradFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" rotWithShape="1">
+  <a:gsLst>
+    <a:gs pos="0">
+      <a:schemeClr val="phClr">
+        <a:satMod val="103000"/>
+        <a:lumMod val="102000"/>
+        <a:tint val="94000"/>
+      </a:schemeClr>
+    </a:gs>
+    <a:gs pos="50000">
+      <a:schemeClr val="phClr">
+        <a:satMod val="110000"/>
+        <a:lumMod val="100000"/>
+        <a:shade val="100000"/>
+      </a:schemeClr>
+    </a:gs>
+    <a:gs pos="100000">
+      <a:schemeClr val="phClr">
+        <a:lumMod val="99000"/>
+        <a:satMod val="120000"/>
+        <a:shade val="78000"/>
+      </a:schemeClr>
+    </a:gs>
+  </a:gsLst>
+  <a:lin ang="5400000" scaled="0"/>
+</a:gradFill>

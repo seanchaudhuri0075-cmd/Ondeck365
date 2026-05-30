@@ -1,0 +1,24 @@
+<test:case xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:test="https://ondeck.local/phase_1c/fixture-harness">
+  <test:description>
+    Order-of-application: shape-side fillRef child carries its own transforms (shade 80000 on accent1).
+    The fillRef idx="2" points to fmtScheme/fillStyleLst[2] stop 0, whose phClr template carries
+    lumMod 110000 + satMod 105000 + tint 67000. Resolution order:
+      1) resolve accent1 → #156082
+      2) apply shape-side transforms in document order → injected as phClr
+      3) apply theme-side transforms in document order → final color
+  </test:description>
+  <test:shape-side>
+    <a:fillRef idx="2">
+      <a:schemeClr val="accent1">
+        <a:shade val="80000"/>
+      </a:schemeClr>
+    </a:fillRef>
+  </test:shape-side>
+  <test:theme-side template="fillStyleLst[2] stop 0">
+    <a:schemeClr val="phClr">
+      <a:lumMod val="110000"/>
+      <a:satMod val="105000"/>
+      <a:tint val="67000"/>
+    </a:schemeClr>
+  </test:theme-side>
+</test:case>
