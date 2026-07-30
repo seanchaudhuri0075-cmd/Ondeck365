@@ -325,3 +325,19 @@ def test_theme_from_pptx_selects_theme1_from_multi_theme():
         assert theme["accent1"] == "#111111"
     finally:
         os.remove(pptx_path)
+
+
+def test_theme_from_pptx_real_shelfbeauty_deck():
+    """theme_from_pptx() end-to-end against a real (trimmed) .pptx zip.
+
+    The prior multi-theme test only proves the selection rule (sort + [0])
+    against synthetic minimal XML. This proves the full path -- zipfile open,
+    real namelist, ET.parse from a real theme1.xml/theme2.xml pair pulled
+    from the actual SHELFBEAUTY_RETAIL_INVESTOR_PRESENTATION_OSRX.pptx deck --
+    closes the gap NOTES.md flagged ("theme_from_pptx() end-to-end is still
+    unverified"). Fixture is the two real theme XMLs re-zipped alone (source
+    deck is 51MB; trimmed fixture is a few KB and committable).
+    """
+    theme = theme_from_pptx(str(FIXTURES / "theme_shelfbeauty.pptx"))
+
+    assert theme == _SHELF_THEME1_EXPECTED

@@ -985,8 +985,6 @@ This is a documented intent, not a queued task. Update or override at Phase 2+ p
 
 - `parse_theme_xml()` is now locked by `theme_demert_default_office.xml`
   (Office default scheme, 12 entries, sysClr handling for dk1/lt1).
-- `theme_from_pptx()` end-to-end is still unverified — the parser is tested,
-  but the pptx-unzip-and-pick-theme1 wrapper has no fixture.
 - Custom-theme decks (non-Office scheme colors) are not yet covered.
   Empirical finding from DEMERT (2026-04-15, current GIF deck): the theme
   layer is left at Office defaults; brand colors live elsewhere (slide
@@ -995,3 +993,22 @@ This is a documented intent, not a queued task. Update or override at Phase 2+ p
 - Multi-theme decks: DEMERT has theme1 + theme2 with identical color
   schemes (diff is in fonts/fillStyleLst only). Behavior on decks where
   theme1 and theme2 disagree on colors is unverified.
+
+## Color resolver — theme_from_pptx() end-to-end closed (2026-07-30)
+
+- `theme_from_pptx()` is now verified end-to-end against a real deck:
+  `SHELFBEAUTY_RETAIL_INVESTOR_PRESENTATION_OSRX.pptx` (theme1 != theme2
+  colors, real 121-entry zip namelist). Fixture is a trimmed re-zip of the
+  deck's real `theme1.xml`/`theme2.xml` alone (source deck is 51MB; fixture
+  is ~4KB) at `phase_1c/fixtures/theme_shelfbeauty.pptx`, exercised by
+  `test_theme_from_pptx_real_shelfbeauty_deck` in `test_color_resolver.py`.
+  Result matches `_SHELF_THEME1_EXPECTED` exactly.
+- The prior synthetic multi-theme test only proved the sort()+[0] selection
+  rule against clean minimal XML; this proves the real zipfile-open +
+  real-namelist + ET.parse path on an actual authored deck.
+- Confirmed this specific deck has no `themeOverride` or other
+  `*theme*`-named entries that could confuse the theme1/theme2 filter.
+- Remaining open item: a deck where theme1 and theme2 disagree on colors
+  (SHELFBEAUTY's two themes match; DEMERT's two themes also match) is still
+  unverified — all real multi-theme decks seen so far happen to have
+  identical color schemes across themes.
