@@ -1,0 +1,6 @@
+<a:solidFill xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <a:schemeClr val="phClr">
+    <a:tint val="95000"/>
+    <a:satMod val="170000"/>
+  </a:schemeClr>
+</a:solidFill>

@@ -1,0 +1,44 @@
+{
+  "fixture": "synthetic_03.xml",
+  "case": "shade applied to a near-black color (RGB-blend-toward-black boundary; verifies non-HSL behavior)",
+  "input_rgb": [
+    24,
+    16,
+    32
+  ],
+  "input_hex": "#181020",
+  "transforms": [
+    [
+      "shade",
+      50000
+    ]
+  ],
+  "final_hex": "#0C0810",
+  "steps": [
+    {
+      "step": "srgbClr #181020",
+      "rgb": [
+        24,
+        16,
+        32
+      ],
+      "hex": "#181020"
+    },
+    {
+      "step": "shade 50000",
+      "rgb": [
+        12.0,
+        8.0,
+        16.0
+      ],
+      "hex": "#0C0810"
+    }
+  ],
+  "final_rgb_int": [
+    12,
+    8,
+    16
+  ],
+  "audit_chain": "#181020 (24,16,32) -> shade 50000 (x0.50 per RGB channel) -> #0C0810 (12,8,16)",
+  "boundary_note": "ECMA-376 wording suggests shade operates in HSL Luminance; PPT empirically performs RGB blend toward black. With v=0.5, each RGB channel halves, preserving hue exactly. Tests the deliberate deviation from spec at the dark end of the gamut."
+}

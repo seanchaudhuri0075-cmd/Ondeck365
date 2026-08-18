@@ -1,0 +1,104 @@
+{
+  "fixture": "synthetic_01.xml",
+  "case": "shape-side mods composed with theme-side mods across fillRef (order-of-application case)",
+  "scheme_color": "accent1 = #156082",
+  "shape_side": {
+    "transforms": [
+      [
+        "shade",
+        80000
+      ]
+    ],
+    "phase_label": "applied first; result becomes phClr for theme template",
+    "final_hex": "#114D68",
+    "steps": [
+      {
+        "step": "accent1 #156082",
+        "rgb": [
+          21,
+          96,
+          130
+        ],
+        "hex": "#156082"
+      },
+      {
+        "step": "shade 80000",
+        "rgb": [
+          16.8,
+          76.8,
+          104.0
+        ],
+        "hex": "#114D68"
+      }
+    ],
+    "final_rgb_int": [
+      17,
+      77,
+      104
+    ]
+  },
+  "theme_side": {
+    "template": "fmtScheme/fillStyleLst[2] stop 0",
+    "transforms": [
+      [
+        "lumMod",
+        110000
+      ],
+      [
+        "satMod",
+        105000
+      ],
+      [
+        "tint",
+        67000
+      ]
+    ],
+    "phase_label": "applied second; consumes phClr from shape-side",
+    "final_hex": "#B0C7D1",
+    "steps": [
+      {
+        "step": "phClr from shape-side #114D68",
+        "rgb": [
+          16.8,
+          76.8,
+          104.0
+        ],
+        "hex": "#114D68"
+      },
+      {
+        "step": "lumMod 110000",
+        "rgb": [
+          18.48,
+          84.48,
+          114.4
+        ],
+        "hex": "#125472"
+      },
+      {
+        "step": "satMod 105000",
+        "rgb": [
+          16.082,
+          85.382,
+          116.798
+        ],
+        "hex": "#105575"
+      },
+      {
+        "step": "tint 67000",
+        "rgb": [
+          176.157,
+          199.026,
+          209.393
+        ],
+        "hex": "#B0C7D1"
+      }
+    ],
+    "final_rgb_int": [
+      176,
+      199,
+      209
+    ]
+  },
+  "final_hex": "#B0C7D1",
+  "audit_chain": "accent1 #156082 -> shade 80000 -> #114D68 -> lumMod 110000 -> satMod 105000 -> tint 67000 -> #B0C7D1"
+}
