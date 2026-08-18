@@ -1,0 +1,37 @@
+{
+  "deck_name": "SHELF Beauty Retail Investor Presentation",
+  "source_pptx": "SHELFBEAUTY_RETAIL_INVESTOR_PRESENTATION_OSRX.pptx",
+  "deck_brand_color": "#000000",
+  "templates": [
+    "cover",
+    "section_divider",
+    "two_column"
+  ],
+  "slides": {
+    "1":  { "template": "cover",           "notes": "Title: 'SHELF Beauty' + subtitle, centered on black." },
+    "2":  { "template": "two_column",      "notes": "The Market: SHELF acronym left, 3 text blocks right." },
+    "3":  { "template": "two_column",      "notes": "The Vision: acronym left, 3 text blocks right." },
+    "4":  { "template": "section_divider", "notes": "The Concept: full-bleed building photo + title overlay." },
+    "5":  { "template": "section_divider", "notes": "Floor 5 / Skin: full-bleed faces photo + caption strip." },
+    "6":  { "template": "two_column",      "notes": "Skin detail: acronym left, bulleted zones right." },
+    "7":  { "template": "section_divider", "notes": "Floor 5: full-bleed store interior." },
+    "8":  { "template": "section_divider", "notes": "Floor 4 / Hair: full-bleed face photo + caption." },
+    "9":  { "template": "two_column",      "notes": "Hair detail: bulleted salon/scalp/experiences." },
+    "10": { "template": "section_divider", "notes": "Floor 4: full-bleed store interior." },
+    "11": { "template": "section_divider", "notes": "Floor 3 / Eyes: full-bleed face photo + caption." },
+    "12": { "template": "two_column",      "notes": "Eyes detail: services/retail/AR try-ons." },
+    "13": { "template": "section_divider", "notes": "Floor 3: full-bleed store interior." },
+    "14": { "template": "section_divider", "notes": "Floor 2 / Lips: full-bleed face photo + caption." },
+    "15": { "template": "two_column",      "notes": "Lips detail bullets." },
+    "16": { "template": "section_divider", "notes": "Floor 2: full-bleed store interior." },
+    "17": { "template": "section_divider", "notes": "Floor 1 / Face: full-bleed face photo + caption." },
+    "18": { "template": "two_column",      "notes": "Face detail: makeup/artistry/retail/content pods." },
+    "19": { "template": "section_divider", "notes": "Floor 1: full-bleed store interior." },
+    "20": { "template": "two_column",      "notes": "The Global Store: 4 sourcing-region blocks + footnote." },
+    "21": { "template": "two_column",      "notes": "Store of the Future: 4 tech bullets." },
+    "22": { "template": "two_column",      "notes": "Target Markets & Locations: 4 blocks." },
+    "23": { "template": "two_column",      "notes": "Opening 90 Day Plan: phased timeline blocks. Review: borderline title_stats." },
+    "24": { "template": "two_column",      "notes": "Store Size & CapEx: financial blocks. Review: borderline title_stats (dollar figures)." },
+    "25": { "template": "section_divider", "notes": "Thank You: full-bleed building hero + title overlay." }
+  }
+}
