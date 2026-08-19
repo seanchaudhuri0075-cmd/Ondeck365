@@ -36,9 +36,15 @@ def extract_signals(pptx_path: str) -> dict:
 
     for name in slide_files:
         root = ET.fromstring(z.read(name))
-        if root.find(".//p:timing", NS) is not None:
+        t = root.find(".//p:timing", NS)
+        if t is not None and any(
+            e.tag.startswith("{%s}anim" % NS["p"])
+            or e.tag == "{%s}set" % NS["p"]
+            for e in t.iter()
+        ):
             animated_slides += 1
-        for sp in root.iter("{%s}sp" % NS["p"]):
+        for tag in ("sp", "pic", "graphicFrame", "cxnSp"):
+         for sp in root.iter("{%s}%s" % (NS["p"], tag)):
             total_shapes += 1
             xfrm = sp.find(".//a:xfrm/a:off", NS)
             if xfrm is not None:
