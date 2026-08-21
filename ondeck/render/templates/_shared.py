@@ -36,9 +36,11 @@ from ...parse.theme import Theme, apply_lum_mod_off
 from ..css import color_with_alpha
 
 
-# PowerPoint stores distances in English Metric Units (1pt = 9525 EMU).
-# Used by shadow + gradient extraction below.
-EMU_PER_PT = 9525
+# PowerPoint stores distances in English Metric Units (1pt = 12700 EMU).
+# Used by shadow + gradient extraction below. (9525 — EMU-per-pixel at 96
+# DPI, not EMU-per-point — was used here previously; see parse/pptx.py's
+# EMU_PER_PT for the full explanation of the bug this fixes.)
+EMU_PER_PT = 12700
 
 # Empirical typeface → font-weight map. Keys lowercased for case-insensitive
 # lookup. Univers Condensed → 500 (Medium), Light → 300, Bold → 700; Barlow
@@ -143,8 +145,65 @@ def inline_data_url(shape, slide: Slide) -> Optional[str]:
     ref = extract_image_ref(shape.element, slide)
     if ref is None or ref.blob is None:
         return None
-    b64 = base64.b64encode(ref.blob).decode("ascii")
-    return f"data:{ref.content_type};base64,{b64}"
+    blob, content_type = _compress_raster(ref.blob, ref.content_type)
+    b64 = base64.b64encode(blob).decode("ascii")
+    return f"data:{content_type};base64,{b64}"
+
+
+def _compress_raster(blob: bytes, content_type: str, max_dim: int = 1600, quality: int = 78) -> tuple[bytes, str]:
+    """Resize + recompress an inlined raster image.
+
+    The uncompressed originals here run several MB *each*, and every
+    slide embeds its own copy inline (no cross-slide dedup — see the
+    module docstring's note on why: this has to survive as a single
+    self-contained file for AirDrop/file:// delivery, which rules out
+    a shared sibling asset). Across a full deck that compounds into a
+    single HTML file too large to actually open on a phone — confirmed
+    directly: an uncompressed 25-slide continuous deck came in at
+    ~128MB and failed to load at all. 1600px is comfortably larger
+    than any real display these slides render at; quality 78 is a
+    standard "visually lossless enough for review" JPEG setting.
+    Skips anything that isn't a raster this can decode (falls back to
+    the original bytes unchanged) rather than risk corrupting content
+    PIL doesn't understand.
+    """
+    if content_type not in ("image/jpeg", "image/png", "image/webp"):
+        return blob, content_type
+    try:
+        from io import BytesIO
+
+        from PIL import Image
+
+        img = Image.open(BytesIO(blob))
+        img.load()
+        has_alpha = img.mode in ("RGBA", "LA") or (
+            img.mode == "P" and "transparency" in img.info
+        )
+        if max(img.size) > max_dim:
+            ratio = max_dim / max(img.size)
+            img = img.resize(
+                (max(1, round(img.size[0] * ratio)), max(1, round(img.size[1] * ratio))),
+                Image.LANCZOS,
+            )
+        out = BytesIO()
+        if has_alpha:
+            # Lossless — JPEG has no alpha channel, and flattening these
+            # (logos/icons, typically) to RGB against an assumed
+            # background color silently destroys transparency, which
+            # showed up directly as a wrong-colored solid block wherever
+            # the shape was meant to show through. PNG stays exact.
+            if img.mode != "RGBA":
+                img = img.convert("RGBA")
+            img.save(out, format="PNG", optimize=True)
+            return out.getvalue(), "image/png"
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        img.save(out, format="JPEG", quality=quality, optimize=True)
+        return out.getvalue(), "image/jpeg"
+    except Exception:
+        # Any decode/encode failure — ship the original rather than drop
+        # the image or crash the render.
+        return blob, content_type
 
 
 def resolve_inherited_size(shape, slide: Slide, paragraph_lvl: int = 0) -> Optional[float]:

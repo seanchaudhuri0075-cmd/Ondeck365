@@ -17,7 +17,17 @@ import pptx as _pptx
 from pptx.presentation import Presentation
 from pptx.slide import Slide
 
-EMU_PER_PT = 9525  # 1 point = 9525 English Metric Units
+EMU_PER_PT = 12700  # 1 point = 12700 English Metric Units (914400 EMU/inch ÷ 72 pt/inch).
+# NOTE: 9525 was used here previously — that's EMU-per-PIXEL at 96 DPI
+# (914400/96), a completely different conversion that was mislabeled as
+# EMU-per-point. Shape x/y/w/h ratios against slide width/height were
+# unaffected (numerator and denominator were equally wrong, so the ratio
+# canceled out) — but anything mixing a true-unit value against slide
+# width/height directly, e.g. font-size or letter-spacing (both declared
+# in real hundredths-of-a-point, unrelated to EMU) expressed as a
+# percentage of slide width, rendered 25% too small (960/1280) than
+# intended. Confirmed against a real declared 48pt headline rendering
+# visibly smaller than the source deck's actual export.
 
 
 class Pptx:
@@ -42,6 +52,25 @@ class Pptx:
     @property
     def slide_count(self) -> int:
         return len(self._prs.slides)
+
+    @property
+    def default_tab_pt(self) -> float:
+        """Default tab-stop interval in points, from <p:defaultTextStyle defTabSz>.
+
+        Governs how leading/embedded literal tab characters in run text
+        advance — some decks use tabs (sometimes combined with literal
+        space runs) to manually position text within a box instead of
+        setting real alignment. Falls back to the OOXML spec default of
+        1 inch (914400 EMU = 72pt) if the attribute is absent.
+        """
+        el = self._prs.element
+        NS = "{http://schemas.openxmlformats.org/presentationml/2006/main}"
+        default_style = el.find(f"{NS}defaultTextStyle")
+        if default_style is not None:
+            val = default_style.get("defTabSz")
+            if val is not None:
+                return int(val) / EMU_PER_PT
+        return 914400 / EMU_PER_PT
 
     def slides(self) -> Iterator[Slide]:
         return iter(self._prs.slides)

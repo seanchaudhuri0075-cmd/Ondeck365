@@ -165,6 +165,7 @@ TEMPLATES = (
     "section_divider",  # photo bg + gradient overlay + 88pt stacked headline
     "media_showcase",   # title + photos or video + circle annotation
     "two_column",       # title + left col + right col
+    "freeform",         # generic: every shape at its real PPTX position
 )
 
 

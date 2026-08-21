@@ -47,14 +47,17 @@ from .parse.pptx import Pptx
 from .parse.theme import extract_theme
 from .render.templates.card_grid import render_card_grid
 from .render.templates.cover import render_cover
+from .render.templates.freeform import render_freeform
 from .render.templates.media_showcase import render_media_showcase
 from .render.templates.section_divider import render_section_divider
 from .render.templates.title_stats import render_title_stats
 from .render.templates.two_column import render_two_column
 
-# Generic default when no manifest tells us otherwise. two_column tolerates
-# arbitrary text/pic structure and needs no media_dir.
-FALLBACK_TEMPLATE = "two_column"
+# Generic default when no manifest tells us otherwise. freeform positions
+# every shape at its real PPTX coordinates, so it degrades gracefully on
+# an arbitrary/unknown deck instead of forcing a hand-tuned layout (like
+# two_column's fixed two-column boxes) onto a structurally different slide.
+FALLBACK_TEMPLATE = "freeform"
 
 # Default canvas/brand color when no manifest supplies deck_brand_color.
 # Non-cover templates fall back to this for any uncovered canvas area.
@@ -73,6 +76,8 @@ def _render_one(
     slide_h_pt: float,
     deck_brand_color: str,
     media_dir,
+    default_tab_pt: float = 72.0,
+    section_headers: dict | None = None,
 ) -> tuple[str, list]:
     """Route one slide to its template renderer, normalizing the return to
     (html, aux_files). Each renderer is called with exactly the arguments its
@@ -98,6 +103,12 @@ def _render_one(
         return render_two_column(
             slide, theme, slide_index, slide_class, deck_name,
             slide_w_pt, slide_h_pt, deck_brand_color,
+        ), []
+    if template == "freeform":
+        return render_freeform(
+            slide, theme, slide_index, slide_class, deck_name,
+            slide_w_pt, slide_h_pt, deck_brand_color, media_dir,
+            default_tab_pt, section_headers,
         ), []
     if template == "card_grid":
         return render_card_grid(
@@ -151,6 +162,13 @@ def convert(pptx_path: str, out_dir: str, manifest_path: str | None = None) -> N
     print("-" * 60)
 
     page_files: list[tuple[int, str, str]] = []  # (index, template, filename)
+    # Shared across the whole render loop: lets a section's "closer" photo
+    # slide (no caption of its own in the source) borrow the header text
+    # its section's "hero" slide already showed, instead of rendering as a
+    # bare photo. Works because slides render in document order and every
+    # section's hero slide precedes its closer in this deck's structure —
+    # see freeform.py's _build_body for the read/write logic itself.
+    section_headers: dict = {}
 
     for i, slide in enumerate(slides, start=1):
         if manifest is not None:
@@ -176,6 +194,8 @@ def convert(pptx_path: str, out_dir: str, manifest_path: str | None = None) -> N
                 slide_h_pt=slide_h_pt,
                 deck_brand_color=deck_brand_color,
                 media_dir=media_dir,
+                default_tab_pt=pptx.default_tab_pt,
+                section_headers=section_headers,
             )
             (out / page_name).write_text(html, encoding="utf-8")
             for rel_name, blob in aux_files:

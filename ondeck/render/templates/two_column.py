@@ -276,19 +276,17 @@ def _extract_paragraphs(text_sp: FlatShape, theme: Theme, slide: Slide) -> list:
 #   rIns = 91440 EMU
 #   bIns = 45720 EMU
 #
-# Convert EMU to the codebase's "pt" unit. Note: the codebase uses
-# EMU_PER_PT = 9525 throughout (parse/pptx.py:20), which is actually
-# EMU-per-pixel-at-96-DPI rather than true ECMA points (12700 EMU/pt).
-# All other geometry in the renderer (frame x/y/w/h, slide_w_pt,
-# slide_h_pt) is in this same px-at-96-DPI unit, so insets must be too
-# to stay dimensionally consistent. Using 9525 here makes the OOXML
-# defaults convert to 9.6 / 4.8 codebase-pt (= 7.2 / 3.6 true pt),
-# matching how every other shape's geometry is computed.
-_EMU_PER_CODEBASE_PT = 9525
-_DEFAULT_LINS_PT = 91440 / _EMU_PER_CODEBASE_PT  # 9.6
-_DEFAULT_TINS_PT = 45720 / _EMU_PER_CODEBASE_PT  # 4.8
-_DEFAULT_RINS_PT = 91440 / _EMU_PER_CODEBASE_PT  # 9.6
-_DEFAULT_BINS_PT = 45720 / _EMU_PER_CODEBASE_PT  # 4.8
+# Convert EMU to the codebase's "pt" unit, i.e. true ECMA points
+# (12700 EMU/pt — see parse/pptx.py's EMU_PER_PT for why this used to
+# be 9525, EMU-per-pixel-at-96-DPI, and why that was wrong). All other
+# geometry in the renderer (frame x/y/w/h, slide_w_pt, slide_h_pt) now
+# uses this same true-point unit, so insets must match to stay
+# dimensionally consistent.
+_EMU_PER_CODEBASE_PT = 12700
+_DEFAULT_LINS_PT = 91440 / _EMU_PER_CODEBASE_PT  # 7.2
+_DEFAULT_TINS_PT = 45720 / _EMU_PER_CODEBASE_PT  # 3.6
+_DEFAULT_RINS_PT = 91440 / _EMU_PER_CODEBASE_PT  # 7.2
+_DEFAULT_BINS_PT = 45720 / _EMU_PER_CODEBASE_PT  # 3.6
 
 
 def _read_bodypr_insets(sp_elem) -> tuple:

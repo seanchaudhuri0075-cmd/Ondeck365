@@ -20,6 +20,7 @@ from typing import Optional
 
 from lxml import etree
 
+from .pptx import EMU_PER_PT
 from .slide import NS
 from .theme import Theme, apply_lum_mod_off
 
@@ -40,6 +41,7 @@ class RunStyle:
     typeface: Optional[str] = None       # latin font, e.g. "Univers"
     color_hex: Optional[str] = None      # already lumMod/lumOff-resolved
     color_alpha: Optional[float] = None  # 0.0–1.0, None = opaque
+    spacing_pt: Optional[float] = None   # letter-spacing/tracking; None = default
 
 
 @dataclass
@@ -52,6 +54,11 @@ class Run:
 class Paragraph:
     align: Optional[str] = None  # 'l' | 'ctr' | 'r' | 'just' | None (inherited)
     runs: list = field(default_factory=list)
+    blank_line_size_pt: Optional[float] = None  # pPr/defRPr size, for empty paragraphs
+    # used as manual vertical spacers — the line still needs to take up
+    # its declared height even though it renders no visible text.
+    bullet_char: Optional[str] = None  # resolved bullet glyph (e.g. '▪'), None if unbulleted
+    marL_pt: Optional[float] = None    # hanging-indent depth (pPr/@marL), for bullet layout
 
 
 @dataclass
@@ -76,9 +83,54 @@ def parse_text_frame(shape_elem: etree._Element, theme: Theme) -> Optional[TextF
     return TextFrame(anchor=anchor, paragraphs=paragraphs)
 
 
+# PowerPoint's built-in bullet presets encode bullet glyphs as codepoints
+# in a symbol font (usually Wingdings/Wingdings 2/3 or Symbol) rather than
+# real Unicode bullet characters — the raw codepoint only looks right if
+# that exact font is installed and used, which it won't be here. Map the
+# handful of codepoints PowerPoint's bullet picker actually offers to their
+# closest real Unicode equivalents. Unmapped codepoints in a known symbol
+# font fall back to a plain round bullet rather than showing the wrong
+# glyph (e.g. a random dingbat) or the raw font's private-use character.
+_WINGDINGS_BULLETS = {
+    "\u00a7": "\u25aa",  # section-sign codepoint -> small black square (this deck)
+    "\u00fc": "\u2713",  # -> checkmark
+    "\u00d8": "\u25c6",  # -> diamond
+    "\u00ac": "\u27a2",  # -> arrow
+}
+_SYMBOL_BULLET_FONTS = {"wingdings", "wingdings 2", "wingdings 3", "symbol", "webdings"}
+
+
+def _resolve_bullet_char(p_pr: etree._Element) -> Optional[str]:
+    bu_char = p_pr.find("a:buChar", NS)
+    if bu_char is None:
+        return None
+    ch = bu_char.get("char")
+    if not ch:
+        return None
+    bu_font = p_pr.find("a:buFont", NS)
+    font_name = bu_font.get("typeface", "").lower() if bu_font is not None else ""
+    if font_name in _SYMBOL_BULLET_FONTS:
+        return _WINGDINGS_BULLETS.get(ch, "\u2022")  # default: round bullet
+    return ch  # already a real Unicode bullet (e.g. buChar char="•")
+
+
 def _parse_paragraph(p_elem: etree._Element, theme: Theme) -> Paragraph:
     p_pr = p_elem.find("a:pPr", NS)
     align = p_pr.get("algn") if p_pr is not None else None
+
+    bullet_char = None
+    marL_pt = None
+    blank_line_size_pt = None
+    if p_pr is not None:
+        bullet_char = _resolve_bullet_char(p_pr)
+        marL = p_pr.get("marL")
+        if marL is not None:
+            marL_pt = int(marL) / EMU_PER_PT
+        def_rpr = p_pr.find("a:defRPr", NS)
+        if def_rpr is not None:
+            sz = def_rpr.get("sz")
+            if sz is not None:
+                blank_line_size_pt = int(sz) / SZ_PER_PT
 
     # Iterate runs in document order. Both <a:r> (regular run) and
     # <a:fld> (field — date, slide number, etc.) carry an <a:t> and
@@ -90,7 +142,10 @@ def _parse_paragraph(p_elem: etree._Element, theme: Theme) -> Paragraph:
         if tag in ("r", "fld"):
             runs.append(_parse_run(child, theme))
 
-    return Paragraph(align=align, runs=runs)
+    return Paragraph(
+        align=align, runs=runs, blank_line_size_pt=blank_line_size_pt,
+        bullet_char=bullet_char, marL_pt=marL_pt,
+    )
 
 
 def _parse_run(r_elem: etree._Element, theme: Theme) -> Run:
@@ -116,6 +171,17 @@ def _parse_run_props(r_pr: etree._Element, theme: Theme) -> RunStyle:
     sz = r_pr.get("sz")
     if sz is not None:
         style.size_pt = int(sz) / SZ_PER_PT
+
+    # spc is letter-spacing/tracking, also in hundredths of a point
+    # (same unit convention as sz — see SZ_PER_PT note above). This is
+    # load-bearing on decks that hand-tune box positions assuming a
+    # specific rendered run width (e.g. centering several differently
+    # sized text boxes so a single leading character lines up across
+    # rows) — dropping it silently breaks that alignment even though
+    # every box's coordinates are otherwise pixel-exact.
+    spc = r_pr.get("spc")
+    if spc is not None:
+        style.spacing_pt = int(spc) / SZ_PER_PT
 
     latin = r_pr.find("a:latin", NS)
     if latin is not None:
