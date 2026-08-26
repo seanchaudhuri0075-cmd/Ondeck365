@@ -261,9 +261,227 @@ on them.
   source it is impossible (base64 > 1.1 GB); even at ~176 MB post-transcode it
   inlines to ~235 MB. Plan external media from the start — a departure from all
   four previous decks, and it needs explicit agreement.
+  **Two corrections to that estimate, 2026-08-26 — see section 8.**
+  (a) **~235 MB is the VIDEO ONLY** (176 MB × 4/3). Deck 9 also has 172 distinct
+  images at 112.8 MB of source bytes; even optimised the way HenHouse's were,
+  they add tens of MB of base64 on top. The realistic embed is **~275–315 MB**,
+  not 235.
+  (b) **The comparison baseline is 65.6 MB, not 24 MB.** HenHouse's imported
+  embedded file is **65,633,415 bytes**. 24.49 MB was its *transcoded video
+  total before base64 inflation* — the payload, not the artefact. Deck 9's embed
+  is roughly **4–5×** the largest file the editor has ingested, not 7×.
 - **This is the fourth per-deck `render.py`.** The scroll defect had to be fixed
   independently in two of them because nothing is shared. Lifting the common
   mobile CSS into `deckkit` is cheaper before deck 9 is written than after.
 - **Old Spice still carries rule 36's problem** — 3.45 MB of its 3.51 MB
   published file is inline `url(data:)` the editor won't externalise. Flagged in
   NOTES for re-import once the editor is fixed. Unrelated to deck 9.
+
+---
+
+## 7. TEST 1 — Deck Editor v14 script tolerance: **PASS** (2026-08-26)
+
+**Answer: yes. An inert `<script>` survives a real editor import, unchanged,
+in every position tested. Section 5a is closed and the IntersectionObserver
+approach is not blocked by the editor.**
+
+Tested by import, not by reasoning about `DOMParser`. The editor is a local
+single-file app, `~/Downloads/Deck_Editor_v14.html` (119,451 B, md5
+`7d2f9bc2ca58cfde9f3e7d4583ecb191`), served over `http://127.0.0.1` and driven
+in Chrome. Fixtures were built from the real HenHouse folder build
+(`out/henhouse/index.html`). Import went through the editor's own
+`<input id="fileIn">` → `loadFile()` → `FileReader.readAsText` → `fullParse()`
+path; only the OS file picker was bypassed.
+
+### Fixture A — one HenHouse slide, four scripts, four positions
+
+`<head>`, top of `<body>`, **inside** the `<section class="slide">`, and end of
+`<body>` (the last carrying a real `IntersectionObserver` bootstrap of the shape
+deck 9 would ship).
+
+| check | result |
+|---|---|
+| all four `<script>` present after load | ✅ |
+| all four present after `commitAll()` | ✅ |
+| all four present in `buildOutput()` — what Export writes | ✅ |
+| `probe-end` script **byte-identical** source → export | ✅ |
+| all four **execute** in the editor's preview iframe | ✅ (`sandbox="allow-same-origin allow-scripts"`) |
+| `IntersectionObserver` constructs inside the preview | ✅ |
+| slide harvest unaffected | 1 section in, 1 slide parsed |
+
+Full diff of source → export, **complete list**, all benign HTML
+re-serialisation and none of it inside a `<script>`:
+
+1. `<!doctype html>` → `<!DOCTYPE html>`
+2. newline between `<html>` and `<head>` dropped
+3. `hidden` → `hidden=""` (boolean attribute normalisation on the rail `<nav>`)
+4. `&#x27;` → `'` **inside `style` attribute values** (font-family quotes) —
+   semantically identical CSS
+5. trailing newlines around `</body></html>`
+
+### Fixture B — full 52-slide HenHouse deck + one end-of-body script
+
+Three successive real `commitAll()` cycles.
+
+| check | result |
+|---|---|
+| slides parsed | **52 / 52** |
+| script surviving cycles 1, 2, 3 | ✅ ✅ ✅ |
+| `window.__IO_OK=true;` intact each cycle | ✅ |
+| output length after cycles 1/2/3 | 192,952 / 192,952 / 192,952 — **idempotent after the first pass** |
+| live text characters | **7,152 in, 7,152 out, identical** |
+| `<img>` / `<video>` / `.rail-item` / `.sh` | 93 / 7 / 52 / 178 — all unchanged |
+
+Length went 196,336 → 192,952 (−3,384). Fully accounted for: 688 `&#x27;` → `'`
+substitutions = −3,440, offset by +56 of `hidden=""`-class normalisations.
+Nothing was lost.
+
+### Corroborating code fact
+
+The editor itself creates and injects `<script>` elements (`__me_script`, the
+media-editor overlay, lines ~1819–1990) into the preview document. It has no
+sanitiser and no script-stripping path anywhere.
+
+**Consequence for deck 9:** ship the IntersectionObserver bootstrap as a single
+end-of-body `<script>`. Section 5b's fallback (fewer simultaneous videos per
+slide on mobile) is **not** forced by the editor. It may still be wanted on its
+own merits for slides 49–64, which carry three videos each — that is a layout
+call, decide it separately.
+
+---
+
+## 8. TEST 2 — Deck Editor v14 embed size ceiling: **ceiling found between 180 and 240 MB**
+
+### 8a. The largest embed the editor has actually ingested
+
+Measured off the artefacts on disk, not from memory:
+
+| deck | embedded file | bytes |
+|---|---|---|
+| Old Spice | `out/oldspice/oldspice_deck_embedded.html` | 12,529,794 |
+| Olay | `out/olay/olay_deck_embedded.html` | 50,098,894 |
+| **HenHouse** | `out/henhouse/henhouse_deck_embedded.html` | **65,633,415** |
+
+**The record is HenHouse at 65,633,415 B (65.6 MB)** — the dedupe-disabled build
+from rule 36, which was imported and published. NOTES' "63.14 MB" is the earlier
+dedupe-*enabled* build and is correct in its own context; the imported artefact
+is the 65.6 MB one.
+
+**Correcting the working figure:** 24.49 MB is HenHouse's *transcoded video
+total* (5 unique mp4s, from the scroll-test variant's `assets/`), i.e. the
+payload before base64 inflation. It is not what the editor ingested. Against the
+right baseline, deck 9's embed is **~4–5× the record**, not ~7×.
+
+### 8b. Is there a size ceiling — measured
+
+**There is no explicit size check anywhere in the editor's code.** The ceiling is
+a memory ceiling, and it is real. Escalating imports of padded HenHouse decks
+(base64 `<video src="data:...">` padding, structure otherwise unchanged), each in
+a freshly reloaded tab:
+
+| file | loaded? | slides parsed | read+parse | JS heap after load | `buildOutput()` | `commitAll()` | preview |
+|---|---|---|---|---|---|---|---|
+| **65.6 MB** (real HenHouse) | ✅ | 52 | 3.9 s | 118 MB | 493 ms | 1,293 ms | 52 sections |
+| **120 MB** | ✅ | 52 | 3.7 s | 302 MB | 817 ms | 2,561 ms | 52 sections |
+| **180 MB** | ✅ | 52 | 2.9 s | 468 MB | 1,226 ms | 3,503 ms | 52 sections |
+| **240 MB** | ✅ import returned | 52 | 3.7 s | **645 MB** | **never ran** | **never ran** | **renderer died** |
+| **320 MB** | **NOT TESTED** | — | — | — | — | — | — |
+
+**What happened at 240 MB.** The import itself completed and reported honestly:
+52 slides parsed, 645 MB JS heap. Then the tab went unresponsive **before the
+first post-load operation executed**. The editor's renderer process vanished
+from the process table (largest surviving Chrome renderer: 172 MB). It did not
+recover — a reload did not bring the tab back and it had to be closed.
+
+**Two limits of this result, stated plainly:**
+
+- **I did not isolate the cause.** The death sits between "import returned" and
+  "first operation ran". The two candidates are the preview iframe rendering a
+  240 MB `srcdoc` (a second full copy of the string, re-parsed into an iframe
+  document, with 24 giant `data:video` URIs to decode) and the first
+  `buildOutput()`. Not separated.
+- **320 MB was generated but never run.** The file exists; the test does not.
+  Nothing below should be read as evidence about 320 MB.
+
+**Peak memory caveat:** the per-size numbers are `performance.memory` JS heap,
+which under-reports — it excludes the DOM, the iframe document, and external
+string storage. Clean per-stage renderer RSS peaks were not captured. **This
+machine has 8 GB of RAM**, which is very likely the binding constraint, and is
+Sean's actual publishing machine.
+
+### 8c. Two amplifiers in the editor's design, read from the source
+
+Both make the ceiling lower than file size alone suggests:
+
+1. **`rawHTML` is re-parsed from scratch on essentially every operation.** There
+   are **~20 separate `DOMParser.parseFromString(rawHTML, 'text/html')` call
+   sites**. Every edit, commit, media enumeration and export builds a complete
+   new DOM of the entire document.
+2. **The undo stack keeps up to 30 full copies of the document.**
+   `pushUndo()` stores `{html: rawHTML}` and `UNDO_MAX = 30`. At 240 MB that is
+   **7.2 GB after 30 edits on an 8 GB machine.** At HenHouse's 65.6 MB it is
+   already ~2 GB. This alone rules out an embedded deck-9 workflow that involves
+   any real editing.
+
+Add `iframe.srcdoc = rawHTML` (a full second copy, re-parsed) after nearly every
+one of those operations. A hard upper bound also exists regardless of RAM: V8's
+maximum string length is ~512 MB, so a file above that cannot be read as text at
+all.
+
+### 8d. THE FINDING THAT CHANGES THE PLAN — the editor already handles external media
+
+**`collectMedia()` handles relative-path media, and the R2 dialog uploads it
+from disk.** This is the question NOTES recorded as unknown ("Deck Editor v14's
+handling of relative asset URLs is undocumented", "recorded nowhere, and was not
+guessed at"). It is answered by the source:
+
+- `collectMedia()` classifies an `img`/`video` `src` that is not `data:`, not
+  `http`, and not `blob:` as `needsFile: true`, keeping its `relPath`.
+- The R2 modal then shows **"📁 Local media files detected — Select Media
+  Folder"** and calls `showDirectoryPicker()` (with a `webkitdirectory` fallback),
+  walking the folder into a `{path → File}` map.
+- `doR2Upload()` uploads the **File off disk** for those items and rewrites the
+  element's `src` to the returned R2 URL, exactly as it does for `data:` items.
+
+**So the publish path for deck 9 does exist.** A multi-file build — small
+`index.html` with relative `src="assets/…"` plus an `assets/` directory — goes
+through the editor without ever inlining 235+ MB of base64. That is also the
+shape GAP has published since May 2026 (`media.globalimaige.com`, absolute
+HTTPS URLs after rewrite). The editor's working set drops to the size of the
+markup, a few hundred KB, and every amplifier in 8c stops mattering.
+
+**Three things to verify before relying on it** (none tested here):
+
+1. **The one-click `Publish` flow does NOT support this path.** `doR2Silent()`
+   — the publish flow's uploader — does `it.isLocal ? it.localFile :
+   dataUriToBlob(it.src)` with **no `needsFile` branch**. On a relative `src`,
+   `dataUriToBlob` runs `uri.split(',')[0].match(/:(.*?);/)` on a plain path,
+   gets `null`, and throws. **Use the explicit `Upload to R2` modal, not
+   `Publish`.** Untested, read from source.
+2. Rule 36 still applies unchanged: only `img`/`video` `src`/`poster` are
+   rewritten. Keep `DEDUPE_CROP_HALVES` off (already decided; deck 9 has no crop
+   halves anyway).
+3. 53 videos + 172 images = ~225 sequential uploads in one `for` loop with no
+   retry — a single failure marks that item `✗` and continues. Budget for a
+   verification pass over the R2 prefix afterwards.
+
+### 8e. What this means for deck 9
+
+- **The self-contained embedded artefact is out.** ~275–315 MB is past a ceiling
+  that sits between 180 and 240 MB on this machine, and the undo-stack
+  multiplier makes editing an embedded build impossible well before that.
+- **The multi-file build is in, and it is not novel** — it is GAP's shape, and
+  the editor supports it through the folder picker.
+- **The R2 prefix hazard is unchanged and gets worse here.** Section 4 /
+  NOTES stand: read the Deck Name field, clear it, type `venus-hestia`. With
+  ~225 objects the blast radius of inheriting `olay-v2` is far larger than the
+  24 ordinals Old Spice clobbered.
+- **Still open, deliberately:** the 320 MB run, and isolating whether the
+  240 MB death was the `srcdoc` preview or `buildOutput()`. Neither blocks the
+  decision above — both point the same way.
+
+**Method note.** Reproduce with the harness in
+`<scratchpad>/editortest/` (POST-capable static server `srv.py`, fixture
+generators, padded decks). The padded decks are ~860 MB on disk and were not
+committed. Disk was at 7.4 GB free after generating them; regenerate rather than
+keep them.
