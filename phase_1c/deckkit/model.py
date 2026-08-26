@@ -411,21 +411,90 @@ def _mark(ctx: Ctx, shapes, W, H):
 
 
 # ---------------------------------------------------------------- build
+def _slide_master_theme(paths: DeckPaths) -> Path:
+    """The theme the SLIDE MASTER references.
+
+    `theme1.xml` is a convention, not a rule. A deck with a notes master has a
+    second theme, and nothing guarantees the slide master owns the first one.
+    Resolve it through the rels (rule 1: bindings come from `_rels`, never from
+    position or filename).
+    """
+    masters = sorted((paths.raw / "ppt" / "slideMasters").glob("slideMaster*.xml"))
+    rels_path = masters[0].parent / "_rels" / (masters[0].name + ".rels")
+    for r in etree.parse(str(rels_path)).getroot():
+        if r.get("Type").rsplit("/", 1)[-1] == "theme":
+            return (masters[0].parent / r.get("Target")).resolve()
+    raise AssertionError("slide master references no theme")
+
+
+def _referenced_scheme_keys(paths: DeckPaths) -> set[str]:
+    """Every scheme colour token that a RENDERING part actually names.
+
+    Slides, the layouts they inherit from, and the slide master. Notes masters
+    and handout masters are excluded: they never reach the canvas. Tokens are
+    normalised through SCHEME_ALIASES so `tx1` and `dk1` compare as one key.
+    """
+    parts = (list(paths.raw.glob("ppt/slides/slide*.xml"))
+             + list(paths.raw.glob("ppt/slideLayouts/slideLayout*.xml"))
+             + list(paths.raw.glob("ppt/slideMasters/slideMaster*.xml")))
+    keys = set()
+    for f in parts:
+        for el in etree.parse(str(f)).getroot().iter(f"{{{NS['a']}}}schemeClr"):
+            v = el.get("val")
+            if v:
+                keys.add(SCHEME_ALIASES.get(v, v))
+    return keys
+
+
 def build_model(paths: DeckPaths) -> tuple[dict, set, set]:
     ctx = Ctx(paths)
     theme_dir = paths.raw / "ppt" / "theme"
 
-    theme = parse_theme((theme_dir / "theme1.xml").read_bytes())
-    t2 = theme_dir / "theme2.xml"
-    if t2.exists():
-        assert asdict(theme) == asdict(parse_theme(t2.read_bytes())), \
-            "theme1/theme2 disagree — the resolver path is unverified for that case"
-        themes_agree = True
-    else:
-        themes_agree = None            # single-theme deck; nothing to compare
+    # Rule 1 applied to themes: resolve by relationship, not by filename.
+    theme_path = _slide_master_theme(paths)
+    theme = parse_theme(theme_path.read_bytes())
+
+    # Deck 9 is the first deck in the corpus whose themes DISAGREE, closing an
+    # open gap that stood through P&G, SHELFBEAUTY and Olay. The original check
+    # compared every theme in the package and refused to build on any
+    # difference. That is too strict, and for the wrong reason: theme2 there
+    # belongs to the NOTES master, which never renders. What actually matters is
+    # whether the parts that DO render name a token the themes disagree on.
+    #
+    # So: compare only on referenced tokens. A conflict on one of those is still
+    # a hard failure -- it would silently paint a wrong colour, which is what
+    # this assertion exists to prevent. A difference confined to tokens nothing
+    # references is recorded and built through.
+    referenced = _referenced_scheme_keys(paths)
+    others = sorted(p for p in theme_dir.glob("theme*.xml") if p != theme_path)
+    tvals = asdict(theme)
+    differing, conflicts = set(), {}
+    for op in others:
+        ovals = asdict(parse_theme(op.read_bytes()))
+        for k in set(tvals) | set(ovals):
+            if isinstance(tvals.get(k), dict) or isinstance(ovals.get(k), dict):
+                continue
+            if tvals.get(k) != ovals.get(k):
+                differing.add(k)
+                if k in referenced:
+                    conflicts[k] = {"slide_theme": tvals.get(k),
+                                    op.name: ovals.get(k)}
+    assert not conflicts, (
+        f"themes disagree on a token the deck actually renders: {conflicts}. "
+        f"Slide master uses {theme_path.name}; resolving with it would paint a "
+        f"different colour than another theme in the package specifies.")
+
+    theme_audit = {
+        "slide_theme": theme_path.name,
+        "other_themes": [p.name for p in others],
+        "referenced_tokens": sorted(referenced),
+        "differing_tokens": sorted(differing),
+        "conflicts_on_referenced": conflicts,
+    }
+    themes_agree = None if not others else not differing
     ctx.theme = theme
 
-    troot = etree.parse(str(theme_dir / "theme1.xml")).getroot()
+    troot = etree.parse(str(theme_path)).getroot()
     tdict = asdict(theme)
     tdict.update({k: getattr(theme, v) for k, v in SCHEME_ALIASES.items()})
     ctx.cr = ColorResolver(tdict)
@@ -458,6 +527,7 @@ def build_model(paths: DeckPaths) -> tuple[dict, set, set]:
 
     deck = {"slug": paths.slug, "w_pt": W, "h_pt": H, "theme": asdict(theme),
             "master_bg": master_bg, "themes_agree": themes_agree,
+            "theme_audit": theme_audit,
             "inherited": dict(ctx.inherited), "major_face": major_face,
             "slides": [], "coverage": []}
     used_images, used_videos = set(), set()

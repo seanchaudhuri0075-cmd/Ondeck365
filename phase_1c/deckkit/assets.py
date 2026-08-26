@@ -89,10 +89,19 @@ def _probe(path: Path) -> dict:
 
 
 def build_videos(paths: DeckPaths, used: set[str], crf: int = VIDEO_CRF,
-                 preset: str = VIDEO_PRESET) -> dict:
+                 preset: str = VIDEO_PRESET, bitrate: str | None = None,
+                 progress: bool = False) -> dict:
     """Sequential + atomic (rule 8). Aspect is PROBED, never assumed — deck 8
     is the first with mixed aspects (1:1 and 9:16, no 16:9 anywhere), so a
-    hardcoded container ratio would crop or letterbox most of them."""
+    hardcoded container ratio would crop or letterbox most of them.
+
+    `bitrate` switches from quality-targeted (CRF) to rate-capped ABR, e.g.
+    "5M". Deck 9 needs this: its source is 845 MB for 4.7 minutes — a 24 Mbps
+    average — and the decision there was made by comparing encodes at a fixed
+    RATE, not a fixed quality, because the deliverable is bounded by what can
+    be shipped rather than by a quality target. 5 Mbps was chosen over 3 Mbps
+    on the 1080x1080 clip, whose fine bottle-label type softens first.
+    `-maxrate`/`-bufsize` cap the peak so a busy frame cannot blow the budget."""
     paths.assets.mkdir(parents=True, exist_ok=True)
     manifest = {}
     for name in sorted(used):
@@ -106,21 +115,29 @@ def build_videos(paths: DeckPaths, used: set[str], crf: int = VIDEO_CRF,
         partial = paths.assets / f"vid_{digest}.__partial.mp4"
         if not dst.exists():
             partial.unlink(missing_ok=True)
+            rate = (["-b:v", bitrate, "-maxrate", bitrate,
+                     "-bufsize", f"{int(bitrate.rstrip('Mm')) * 2}M"]
+                    if bitrate else ["-crf", str(crf)])
             subprocess.run(
                 ["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", str(src),
-                 "-c:v", "libx264", "-crf", str(crf), "-preset", preset,
+                 "-c:v", "libx264", *rate, "-preset", preset,
                  "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", str(partial)],
                 check=True)
             partial.replace(dst)
+        if progress:
+            print(f"  {len(manifest) + 1:>3}/{len(used)}  {name:16} "
+                  f"{src.stat().st_size / 1e6:7.2f} -> {dst.stat().st_size / 1e6:6.2f} MB",
+                  flush=True)
         info = _probe(dst)
         manifest[name] = {"out": out_name, "sha": digest, **info,
                           "src_bytes": src.stat().st_size, "out_bytes": dst.stat().st_size}
     return manifest
 
 
-def build_all(paths: DeckPaths, used_images: set[str], used_videos: set[str], **kw) -> dict:
+def build_all(paths: DeckPaths, used_images: set[str], used_videos: set[str],
+              video_kw: dict | None = None, **kw) -> dict:
     imgs = build_images(paths, used_images, **kw)
-    vids = build_videos(paths, used_videos)
+    vids = build_videos(paths, used_videos, **(video_kw or {}))
     leftovers = sorted(p.name for p in paths.assets.glob("*.__partial.*"))
     assert not leftovers, f"partial files left in outputs (rule 8): {leftovers}"
     m = {"images": imgs, "videos": vids}

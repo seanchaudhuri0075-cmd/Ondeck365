@@ -130,6 +130,17 @@ _OPTIONAL_FONTS = {
         ("Barlow Condensed", "BarlowCondensed-700.woff2", 700, "woff2", "font/woff2",
          _BARLOW_UNICODE_RANGE, None),
     ),
+    # Metric-compatible with Arial and Helvetica by design, which is why
+    # BUNDLED_FALLBACKS maps all three to it. It lives in the default bundle
+    # too; it is repeated here so a deck that opts in to its own families can
+    # still get it. Deck 9 needs exactly that: Archivo for Helvetica Light,
+    # Liberation Sans for the 75 Arial runs. Without this entry the family is
+    # NAMED but never EMBEDDED, and a bare unknown family falls through to the
+    # browser default serif -- the Olay "cards rendered in Times" defect.
+    "Liberation Sans": (
+        ("Liberation Sans", "LiberationSans-Regular.woff", 400, "woff", "font/woff", None, None),
+        ("Liberation Sans", "LiberationSans-Bold.woff", 700, "woff", "font/woff", None, None),
+    ),
 }
 
 # Bundled-family name each typeface-resolution fallback should try, keyed
