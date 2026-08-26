@@ -32,6 +32,14 @@ from phase_1c.venus_hestia.paths import PATHS
 
 E = html.escape
 
+# OOXML alignment tokens are NOT CSS keywords. Emitting them raw produces
+# `text-align:ctr`, which is invalid, silently ignored, and leaves the paragraph
+# left-aligned. That is how 110 authored-centre paragraphs across 46 of this
+# deck's 65 slides were rendering left -- including the retained cover title,
+# which is what surfaced it at desktop review.
+ALIGN = {"ctr": "center", "l": "left", "r": "right",
+         "just": "justify", "dist": "justify", "justLow": "justify"}
+
 
 def _pct(v: float, total: float) -> str:
     return f"{v / total * 100:.4f}%"
@@ -103,7 +111,10 @@ def shape_html(s: dict, W: float, H: float, imgman: dict, vidman: dict) -> str:
             if not spans:
                 paras.append('<p class="t e"></p>')
                 continue
-            al = f"text-align:{p['align']};" if p.get("align") else ""
+            css_align = ALIGN.get(p.get("align")) if p.get("align") else None
+            assert p.get("align") is None or css_align, \
+                f"unmapped OOXML alignment token {p.get('align')!r}"
+            al = f"text-align:{css_align};" if css_align else ""
             paras.append(f'<p class="t" style="{al}">{spans}</p>')
         ins = s.get("insets") or {}
         if any(ins.get(k) for k in "lrtb"):

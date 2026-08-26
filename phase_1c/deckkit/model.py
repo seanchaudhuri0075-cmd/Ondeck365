@@ -446,7 +446,21 @@ def _referenced_scheme_keys(paths: DeckPaths) -> set[str]:
     return keys
 
 
-def build_model(paths: DeckPaths) -> tuple[dict, set, set]:
+def build_model(paths: DeckPaths,
+                drop_slides: frozenset[int] = frozenset()) -> tuple[dict, set, set]:
+    """`drop_slides` holds SOURCE slide numbers the client asked to omit.
+
+    Dropping happens here, not in a renderer, so a dropped slide never reaches
+    the model, never contributes to `used_assets`, and cannot be resurrected by
+    a re-render. Remaining slides are renumbered 1..N so the editor's rail,
+    counter and `data-slide` ordinals stay sequential (rules 22/30), and each
+    carries `src_n` so it can still be traced to the source deck.
+
+    This is NOT rule 30's mobile merge, which collapses a section to zero height
+    and must never remove it. That rule protects the editor's slide list from
+    diverging between breakpoints. This removes a slide from the DELIVERABLE at
+    every breakpoint, on the client's instruction, which is a different act.
+    """
     ctx = Ctx(paths)
     theme_dir = paths.raw / "ppt" / "theme"
 
@@ -533,7 +547,14 @@ def build_model(paths: DeckPaths) -> tuple[dict, set, set]:
     used_images, used_videos = set(), set()
     ph_geo = build_ph_geometry(paths)
 
-    for idx, fname in enumerate(order, 1):
+    kept, dropped = [], []
+    for src_n, fname in enumerate(order, 1):
+        (dropped if src_n in drop_slides else kept).append((src_n, fname))
+    assert not (drop_slides - {n for n, _ in dropped}), \
+        f"drop_slides names slides that do not exist: {sorted(drop_slides - {n for n, _ in dropped})}"
+    deck["dropped_slides"] = [{"src_n": n, "file": f} for n, f in dropped]
+
+    for idx, (src_n, fname) in enumerate(kept, 1):
         root = etree.parse(str(paths.slide_xml(fname))).getroot()
         rl = _rels(paths, int("".join(c for c in fname if c.isdigit())))
         layout_name = next((os.path.basename(v["target"]) for v in rl.values()
@@ -656,13 +677,13 @@ def build_model(paths: DeckPaths) -> tuple[dict, set, set]:
                       if etree.QName(c).localname in ("sp", "pic") and _is_design_locker(c))
         deck["coverage"].append({"slide": idx, "shapes": len(shapes), "skipped": skipped,
                                  "design_lockers": lockers, "unbound_rels": unbound})
-        deck["slides"].append({"n": idx, "file": fname, "bg": bg_hex, "bg_alpha": bg_a,
+        deck["slides"].append({"n": idx, "src_n": src_n, "file": fname, "bg": bg_hex, "bg_alpha": bg_a,
                                "bg_image": bg_img, "shapes": shapes})
     return deck, used_images, used_videos
 
 
-def write_model(paths: DeckPaths):
-    deck, imgs, vids = build_model(paths)
+def write_model(paths: DeckPaths, drop_slides: frozenset[int] = frozenset()):
+    deck, imgs, vids = build_model(paths, drop_slides=drop_slides)
     paths.out.mkdir(parents=True, exist_ok=True)
     (paths.out / "model.json").write_text(json.dumps(deck, indent=1))
     (paths.out / "used_assets.json").write_text(
