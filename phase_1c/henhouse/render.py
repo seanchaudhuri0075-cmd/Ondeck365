@@ -27,6 +27,7 @@ from ondeck.parse.font_calibration import (
     MATCHED_METRIC_SUBS, MATCHED_METRIC_AXES, SOURCE_LINE_HEIGHT_RATIOS,
 )
 from ondeck.render.fonts import font_face_css
+from phase_1c.deckkit import css as dkcss
 from phase_1c.deckkit.paths import DeckPaths
 from phase_1c.henhouse import roles
 
@@ -825,7 +826,7 @@ def shape_html(sh, deck, man, W, H, idx, extra_cls=(), pair_slot=None, role='flo
 
 # ---------------------------------------------------------------- page
 def build_css(deck, W, H):
-    ratio = W / H
+    ratio = dkcss.ratio(W, H)
     return f"""
 :root{{
   --deck-font:{roles.BODY_STACK};
@@ -844,7 +845,7 @@ section.slide{{scroll-snap-align:start;scroll-snap-stop:always;
       min-height:100svh;background:#111}}
 
 /* ---- desktop: the authored canvas, absolutely positioned ---- */
-.canvas{{position:relative;width:min(100vw, calc(100svh * var(--ratio)));
+.canvas{{position:relative;width:{dkcss.CANVAS_WIDTH_FIT};
         aspect-ratio:var(--ratio);container-type:size;overflow:hidden;
         background:var(--bg-solid,var(--bg,#fff))}}
 /* A band is inert on desktop: display:contents removes its box, so the
@@ -1025,21 +1026,12 @@ p.t[data-bullet]::before{{content:attr(data-bullet) " "}}
   /* everything else flows, positioned so it paints above any ground */
   .sh[data-role="flow"]{{position:relative !important}}
   /* ================================================================ */
-  /* Snap OFF on touch. Measured at 390x844: 28 of 51 snap points sit exactly
-     one viewport apart, so proximity has nowhere to rest that is NOT within
-     its threshold -- it re-targets every fling and animates on its own curve,
-     behaving identically to mandatory. Geometry, not the keyword, was doing
-     that. Turning the snap container off is the only thing that returns the
-     browser's own deceleration, because snap re-targeting IS what overrides
-     it. The cost is exact and accepted: slides no longer align, so a flick can
-     rest mid-slide. Desktop keeps proximity snap untouched.
-     scroll-snap-align on section.slide is left in place -- it is inert without
-     a snap container, and it still serves desktop from the same rule.
-     scroll-snap-stop below is likewise inert while snap is off; it is kept so
-     that re-enabling snap here restores the correct touch value rather than
-     silently inheriting the desktop `always`. */
-  #deck{{scroll-snap-type:none}}
-  section.slide{{scroll-snap-stop:normal}}
+  /* Deck-specific measurement, kept: at 390x844, 28 of 51 snap points sit
+     exactly one viewport apart, so proximity had nowhere to rest that was
+     NOT within its threshold -- it re-targeted every fling and animated on
+     its own curve, behaving identically to mandatory. Geometry, not the
+     keyword, was doing that. */
+{dkcss.mobile_scroll_release("section.slide")}
   .sh.tx{{justify-content:flex-start !important}}
   .sh.tbl table{{height:auto}}
   p.t,p.ci{{font-size:inherit}}

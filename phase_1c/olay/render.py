@@ -9,7 +9,8 @@ an edit would update one view while the other silently went stale.
 
 So: one set of 34 `<section class="slide">`, and the layout switch happens
 in CSS. Desktop keeps exactly what rule 15 wants — absolute percentage
-positioning on a 16:9 `container-type: size` canvas, type in cqw. Mobile
+positioning on a `container-type: size` canvas at the deck's own aspect
+(read from p:sldSz, never hardcoded), type in cqw. Mobile
 flips the same nodes to static flow with per-shape `order`. Rule 15's root
 cause ("one DOM cannot serve both cleanly") is what is being challenged
 here; its goal (pixel-faithful desktop, sensible mobile) is preserved.
@@ -26,6 +27,7 @@ from pathlib import Path
 sys.path.insert(0, "/Users/gif025/Downloads/ondeck-pipeline")
 from ondeck.render.fonts import font_face_css
 from ondeck.parse.font_calibration import SOURCE_LINE_HEIGHT_RATIOS, MATCHED_METRIC_AXES
+from phase_1c.deckkit import css as dkcss
 
 sys.path.insert(0, str(Path(__file__).parent))
 from roles import (BADGE_SPRITE, BANNERS, LOGOS, STRIP_SLIDES,
@@ -312,8 +314,8 @@ img,video{display:block;max-width:none}
 #deck{scroll-snap-type:y mandatory;overflow-y:auto;height:100vh}
 .slide{scroll-snap-align:start;scroll-snap-stop:always;display:flex;
   align-items:center;justify-content:center;min-height:100vh;padding:2vh 2vw}
-.canvas{position:relative;width:100%;max-width:calc(177.78vh - 8vh);
-  aspect-ratio:16/9;container-type:size;overflow:hidden}
+.canvas{position:relative;width:100%;max-width:calc(100vh * var(--ratio) - 8vh);
+  aspect-ratio:var(--ratio);container-type:size;overflow:hidden}
 
 .sh{position:absolute}
 .sh.im,.sh.vid,.sh.bgimg{overflow:hidden}
@@ -329,21 +331,14 @@ img,video{display:block;max-width:none}
 .sh.tx p.e{min-height:1em}
 
 @media (max-width:820px){
-  /* Snap OFF on touch, and stop released. scroll-snap-stop:always is a
-     DISCRETE-paging affordance -- it forbids the container passing over a snap
-     position, which is what a wheel or arrow key wants and what turns every
-     fling into a single-step advance on an inertial surface. Snap re-targeting
-     is also what overrides the browser's own deceleration curve, so the
-     container goes to `none`. Desktop keeps `y mandatory` + `always`.
-     Geometry note: unlike HenHouse (28 of 51 snap points exactly one viewport
-     apart), Olay's are varied -- 11 of 33 -- but NO gap is shorter than a
-     viewport (min 844px at 390x844), so proximity still intercepts most
-     flings. Ported from HenHouse; see LEARNINGS/NOTES 2026-08-24.
-     The .slide selector is left blanket for now: it also lands on the strip
-     carousel tiles, whose own snap is on the x axis, so `stop` there is inert.
-     Left visible rather than pre-empted. */
-  #deck{scroll-snap-type:none}
-  .slide{scroll-snap-stop:normal}
+/*__SCROLL_GATE__*/
+  /* Deck-specific geometry note, kept from the Olay port: unlike HenHouse
+     (28 of 51 snap points exactly one viewport apart), Olay's are varied --
+     11 of 33 -- but NO gap is shorter than a viewport (min 844px at 390x844),
+     so proximity still intercepted most flings and `stop:always` was likely
+     the dominant cause. The .slide selector is left blanket: it also lands on
+     the strip carousel tiles, whose own snap is on the x axis, so `stop` there
+     is inert. Left visible rather than pre-empted. */
   .slide{min-height:auto;padding:0;display:block}
   .canvas{max-width:none;aspect-ratio:auto;height:auto;container-type:inline-size;
     display:flex;flex-wrap:wrap;align-items:flex-start;padding:16px 14px 26px}
@@ -437,6 +432,8 @@ def main():
     imgman = json.load(open(OUT / "image_manifest.json"))
     vidman = json.load(open(OUT / "video_manifest.json"))
     body = render(model, imgman, vidman)
+    css = CSS.replace("/*__SCROLL_GATE__*/",
+                      dkcss.mobile_scroll_release(".slide"))
     doc = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -445,7 +442,8 @@ def main():
 <title>{esc(DECK_TITLE)}</title>
 <style>
 {font_face_css(families=("Archivo", "Poppins"))}
-{CSS}
+{dkcss.ratio_root(model["w_pt"], model["h_pt"])}
+{css}
 </style>
 </head>
 <body>

@@ -276,16 +276,53 @@ Decks referenced: **Wheeber**, **FrameTag**, **Global ImAIge** (Global Image Fac
 
 - **Symptom** — A single responsive DOM could not be both pixel-faithful on desktop and
   sensibly reflowed on mobile.
-- **Root cause** — Desktop fidelity needs absolute positioning on a fixed 16:9 canvas;
-  mobile needs a reflowed, scroll-friendly document. One DOM cannot serve both cleanly.
+- **Root cause** — Desktop fidelity needs absolute positioning on a fixed canvas at the
+  deck's own aspect; mobile needs a reflowed, scroll-friendly document. One DOM cannot
+  serve both cleanly.
 - **Rule** — Emit two sections from the same source: `#deck-desktop`, an absolutely-
-  positioned 16:9 canvas using `cqw` units (pixel-faithful), and a completely separate
-  `#deck-mobile` scroll-snap DOM. Per-slide CSS is scoped (`.slide-N`). Editor vocabulary
-  classes are preserved (`.L > .t`, `.ci`, `.tlt`, `.tlb`, `.uct`, `.ucb`, etc.). Scroll
-  behavior: `scroll-snap` mandatory on desktop, proximity on mobile, `scroll-snap-stop:
-  always`. *Assertion:* every slide emits both a `#deck-desktop` and a `#deck-mobile`
-  representation; desktop canvas uses `cqw`, neither uses `vh`/`vw` for type.
+  positioned canvas **at the deck's own aspect** using `cqw` units (pixel-faithful), and
+  a completely separate `#deck-mobile` scroll-snap DOM. Per-slide CSS is scoped
+  (`.slide-N`). Editor vocabulary classes are preserved (`.L > .t`, `.ci`, `.tlt`,
+  `.tlb`, `.uct`, `.ucb`, etc.). Scroll behaviour: snap on desktop (`mandatory` or
+  `proximity`) with `scroll-snap-stop: always`; **below the mobile breakpoint release
+  the snap container** — `scroll-snap-type: none` and `scroll-snap-stop: normal`.
+  *Assertion:* every slide emits both a `#deck-desktop` and a `#deck-mobile`
+  representation; desktop canvas uses `cqw`, neither uses `vh`/`vw` for type; **no
+  emitted CSS contains a hardcoded aspect ratio** — every canvas aspect traces to
+  `p:sldSz`; and **no rule below the mobile breakpoint sets `scroll-snap-stop: always`**.
 - **Proven by** — P&G (dual-build pattern established), Global ImAIge (continuous scroll).
+- **Amended 2026-08-26, on two counts. Both were places where this rule did not merely
+  fail to prevent a defect — it prescribed one.**
+  1. **The aspect is not 16:9; it is whatever `p:sldSz` says.** This rule said "16:9
+     canvas" twice, and three builders duly hardcoded it — `aspect-ratio:16/9` plus a
+     `max-width:calc(177.78vh - 8vh)` in which `177.78` is `16/9 × 100` wearing a
+     disguise. That is correct for the four 960×540 decks and silently wrong for deck 9
+     (Venus/Hestia), which is **1224 × 792pt — 17 × 11in tabloid landscape, aspect
+     1.5455**. Read the dimensions and publish them as `--ratio`; size everything off
+     that. Pillar-boxing a 1.55:1 deck on a 16:9 monitor is correct behaviour, not a bug
+     to pad away. The positioning and type maths were never aspect-dependent — only
+     these literals were.
+  2. **`scroll-snap-stop: always` is wrong on an inertial surface.** Per CSS Scroll Snap
+     `always` forbids the container passing over a snap position during a scrolling
+     operation, so every fling is forced to the nearest snap point. That is a
+     **discrete-paging** affordance: right for a wheel or an arrow key, wrong for a
+     thumb. This rule mandated it unconditioned, so it shipped on every deck and was
+     found only in live review — HenHouse after four mobile rounds, Olay after five,
+     because every round reviewed appearance and none reviewed **scroll behaviour as its
+     own dimension**. Snap re-targeting is also what overrides the browser's own
+     deceleration curve, so releasing `scroll-snap-type` is what actually returns
+     momentum; the accepted cost is that a flick can rest mid-slide.
+  **Both now live in `phase_1c/deckkit/css.py`** (`ratio_root`, `CANVAS_WIDTH_FIT`,
+  `canvas_max_width`, `mobile_scroll_release`, `MOBILE_BP`) so the next builder inherits
+  them instead of re-deriving them. That module exists because nothing was shared: the
+  scroll defect had to be diagnosed on HenHouse, ported by hand to Olay, and **was
+  missed entirely on Old Spice**, which still ships `y mandatory` + `always` at every
+  width — the strictest of the three — on a live deck. Three builders, three chances,
+  two takers.
+  - **Corollary — a rule is a defect source, not just a defence.** When the same mistake
+    turns up in two or three builders, check the spec before blaming the builders. Three
+    independent authors do not converge on the same wrong value by accident; they were
+    told to.
 
 ---
 

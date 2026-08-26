@@ -25,6 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, "/Users/gif025/Downloads/ondeck-pipeline")
 from ondeck.render.fonts import font_face_css
+from phase_1c.deckkit import css as dkcss
 from ondeck.parse.font_calibration import (SOURCE_LINE_HEIGHT_RATIOS, MATCHED_METRIC_AXES,
                                            normalize_typeface)
 
@@ -243,6 +244,22 @@ def render(model, man, units_by_slide):
     return "\n".join(sections), dropped
 
 
+# ---------------------------------------------------------------------------
+# KNOWN-OPEN DEFECT, deliberately not fixed in this pass.
+#
+# This deck still ships `#deck{scroll-snap-type:y mandatory}` and
+# `.slide{scroll-snap-stop:always}` at EVERY width -- the discrete-paging
+# affordance diagnosed on HenHouse (NOTES 2026-08-24) and ported to Olay
+# (2026-08-25). Old Spice was missed, and is the strictest of the three
+# (`mandatory`, not `proximity`).
+#
+# It is left off because oldspicepackaging.globalimaige.com is signed off and
+# live: turning it on changes the mobile feel of a shipped deck, which is a
+# re-ship decision, not a refactor. Flip to True, rebuild, re-verify on a
+# phone, and re-import to fix it. Same per-deck opt-in shape as
+# DEDUPE_CROP_HALVES and KEEP_AUTHORED_STRETCH.
+EMIT_MOBILE_SCROLL_GATE = False
+
 CSS = """
 *{box-sizing:border-box;margin:0;padding:0}
 /* The deck's own default stack (theme minor font -> its substitute) and the
@@ -260,8 +277,8 @@ img{display:block;max-width:none}
 #deck{scroll-snap-type:y mandatory;overflow-y:auto;height:100vh}
 .slide{scroll-snap-align:start;scroll-snap-stop:always;display:flex;
   align-items:center;justify-content:center;min-height:100vh;padding:2vh 2vw}
-.canvas{position:relative;width:100%;max-width:calc(177.78vh - 8vh);
-  aspect-ratio:16/9;container-type:size;overflow:hidden}
+.canvas{position:relative;width:100%;max-width:calc(100vh * var(--ratio) - 8vh);
+  aspect-ratio:var(--ratio);container-type:size;overflow:hidden}
 
 .sh{position:absolute}
 .sh.im{overflow:hidden}
@@ -278,6 +295,7 @@ p.li{padding-left:1em;text-indent:-1em}
 .units{display:none}
 
 @media (max-width:820px){
+/*__SCROLL_GATE__*/
   .slide{min-height:auto;padding:0;display:block}
   .canvas{max-width:none;aspect-ratio:auto;height:auto;container-type:inline-size;
     display:flex;flex-wrap:wrap;align-items:flex-start;align-content:center;
@@ -454,6 +472,11 @@ def main():
     units_by_slide = json.loads((OUT / "units.json").read_text()) \
         if (OUT / "units.json").exists() else {}
     body, dropped = render(model, man, units_by_slide)
+    css = CSS.replace("/*__SCROLL_GATE__*/",
+                      dkcss.mobile_scroll_release(".slide")
+                      if EMIT_MOBILE_SCROLL_GATE else
+                      "  /* mobile scroll gate NOT emitted -- see"
+                      " EMIT_MOBILE_SCROLL_GATE above */")
     card_slide, cards = build_cards(model, model["w_pt"])
     if cards:
         marker = f'<section class="slide" id="s{card_slide}"'
@@ -467,7 +490,8 @@ def main():
 <title>{esc(DECK_TITLE)}</title>
 <style>
 {font_face_css(families=("Barlow Condensed", "Archivo"))}
-{CSS}
+{dkcss.ratio_root(model["w_pt"], model["h_pt"])}
+{css}
 </style>
 </head>
 <body>
