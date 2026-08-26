@@ -89,8 +89,42 @@ def _is_design_locker(shape_elem) -> bool:
     Per the spec: <p16:designElem val="1"/> appears in nvPr extLst on
     rectangles Designer inserts with noFill noLine. They have zero visual
     output but appear in the shape tree.
+
+    The marker alone is NOT sufficient. PowerPoint Designer also stamps it on
+    shapes the author subsequently gave real styling to, and dropping those
+    deletes visible content — the exact silent-skip failure rule 3 exists to
+    prevent. The Olay deck has 18 marked shapes: 10 are true no-ops, but 8
+    carry a solidFill, including the three white drop-shadowed cards behind
+    slide 9's video tiles and a full-slide translucent wash. Rendering
+    without them leaves the slide background showing through where panels
+    should be.
+
+    So: the marker gates the check, and visual emptiness decides it. A marked
+    shape is a locker only when it paints nothing — no fill, no visible line,
+    no image, no text. Genuine `noFill noLine` lockers still test True, so
+    decks that relied on the old behaviour are unaffected.
     """
-    return shape_elem.find(".//p16:designElem[@val='1']", NS) is not None
+    if shape_elem.find(".//p16:designElem[@val='1']", NS) is None:
+        return False
+
+    sp_pr = shape_elem.find("p:spPr", NS)
+    if sp_pr is None:
+        return True
+
+    # Any fill other than an explicit <a:noFill/> paints something.
+    for fill in ("a:solidFill", "a:gradFill", "a:blipFill", "a:pattFill"):
+        if sp_pr.find(fill, NS) is not None:
+            return False
+    # A line paints unless it is itself noFill.
+    ln = sp_pr.find("a:ln", NS)
+    if ln is not None and ln.find("a:noFill", NS) is None and len(ln):
+        return False
+    # An embedded picture or any non-empty text run is content by definition.
+    if shape_elem.find(".//a:blip", NS) is not None:
+        return False
+    if any((t.text or "").strip() for t in shape_elem.iter(f"{{{NS['a']}}}t")):
+        return False
+    return True
 
 
 def _xfrm_pt(elem, kind: str) -> tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
