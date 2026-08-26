@@ -423,7 +423,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);heigh
         <div class="r2f">
           <label>Deck Name (folder prefix)</label>
           <input type="text" id="r2Deck" placeholder="clientname-deck" />
-          <div class="r2h">Files stored as /deckname/video-1.mp4</div>
+          <div class="r2h">Files stored as /deckname/video-1.mp4 — <strong>not remembered between decks; set it every time</strong></div>
         </div>
         <div class="r2f">
           <label>Auth Token</label>
@@ -1398,8 +1398,16 @@ async function exportDeck(){
 function fileToDataUri(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(file)})}
 
 /* ═══ R2 Settings persistence ═══ */
-function loadR2(){try{const s=JSON.parse(localStorage.getItem('deckR2')||'{}');if(s.url)document.getElementById('r2Url').value=s.url;if(s.deck)document.getElementById('r2Deck').value=s.deck;if(s.token)document.getElementById('r2Token').value=s.token}catch(e){}}
-function saveR2(){try{localStorage.setItem('deckR2',JSON.stringify({url:document.getElementById('r2Url').value.trim(),deck:document.getElementById('r2Deck').value.trim(),token:document.getElementById('r2Token').value.trim()}))}catch(e){}}
+/* Worker URL and Auth Token are PER-OPERATOR and persist. The Deck Name is
+   PER-DECK and deliberately does NOT: it is never written to localStorage and
+   never restored, so the field starts empty on every load.
+   An empty field is a visible prompt; a pre-filled wrong one is not. This field
+   silently carried `olay` into three Old Spice imports on 2026-08-21, wrote 29
+   objects into another client's prefix and clobbered 24 of Olay's image
+   ordinals, and nothing flagged it because the deck still rendered. It could
+   not have inherited an empty field. See NOTES 2026-08-25. */
+function loadR2(){try{const s=JSON.parse(localStorage.getItem('deckR2')||'{}');if(s.url)document.getElementById('r2Url').value=s.url;if(s.token)document.getElementById('r2Token').value=s.token}catch(e){}}
+function saveR2(){try{localStorage.setItem('deckR2',JSON.stringify({url:document.getElementById('r2Url').value.trim(),token:document.getElementById('r2Token').value.trim()}))}catch(e){}}
 
 /* ═══ Collect all base64/local media from the deck ═══ */
 function collectMedia(){
@@ -1456,7 +1464,12 @@ function openR2Modal(){
     });
     list.innerHTML=h;document.getElementById('r2Go').disabled=false;
   }
-  if(!document.getElementById('r2Url').value.trim())document.getElementById('r2Cfg').open=true;
+  /* The config panel is a collapsed <details>. It was force-opened only when the
+     Worker URL was blank -- and the Worker URL persists, so it never was. An
+     empty Deck Name would therefore sit HIDDEN inside a closed panel, which
+     defeats the whole point of clearing it. Open on either. */
+  if(!document.getElementById('r2Url').value.trim()
+     ||!document.getElementById('r2Deck').value.trim())document.getElementById('r2Cfg').open=true;
   document.getElementById('r2Modal').classList.add('open');
 }
 function closeR2(){document.getElementById('r2Modal').classList.remove('open')}
@@ -1515,9 +1528,15 @@ function dataUriToBlob(uri){const p=uri.split(','),mime=p[0].match(/:(.*?);/)[1]
 /* ═══ Do the R2 upload ═══ */
 async function doR2Upload(){
   const workerUrl=document.getElementById('r2Url').value.trim();
-  const deckName=document.getElementById('r2Deck').value.trim()||'deck';
+  /* No `|| 'deck'` fallback. Making the field start empty only helps if empty
+     is refused -- otherwise it just trades a silently WRONG prefix for a
+     silently GENERIC one that every deck would then share. */
+  const deckName=document.getElementById('r2Deck').value.trim();
   const authToken=document.getElementById('r2Token').value.trim();
   if(!workerUrl){toast('Enter your Worker URL in R2 Configuration');return}
+  if(!deckName){document.getElementById('r2Cfg').open=true;
+    document.getElementById('r2Deck').focus();
+    toast('Enter the Deck Name (folder prefix) before uploading');return}
   saveR2();
 
   const items=collectMedia();
@@ -1607,9 +1626,10 @@ function setStep(id,icon,text,status,cls){
 /* ═══ Silent R2 upload (for publish flow) ═══ */
 async function doR2Silent(){
   const workerUrl=document.getElementById('r2Url').value.trim();
-  const deckName=document.getElementById('r2Deck').value.trim()||'deck';
+  const deckName=document.getElementById('r2Deck').value.trim();
   const authToken=document.getElementById('r2Token').value.trim();
   if(!workerUrl)throw new Error('No Worker URL configured');
+  if(!deckName)throw new Error('No Deck Name (folder prefix) set');
   const items=collectMedia();if(!items.length)return;
   const urlMap={};
   for(const it of items){
