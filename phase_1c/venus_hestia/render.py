@@ -153,6 +153,11 @@ section.slide{{scroll-snap-align:start;scroll-snap-stop:always;display:flex;
 /* Rule 21: container-type makes the canvas a stacking context, so nothing
    inside carries a z-index. Paint order is DOM order, which is source
    z-order. */
+/* The strip/cell wrappers exist only for the mobile carousel. display:contents
+   removes their boxes on desktop, so the absolutely-positioned .sh children
+   still resolve against .canvas and the FLATTENED tree order -- which is paint
+   order, rule 21 -- is what it always was. Same technique as HenHouse's .band. */
+.strip,.cell{{display:contents}}
 .sh{{position:absolute;display:flex;flex-direction:column}}
 .sh.im,.sh.vid{{overflow:hidden}}
 .sh.im>img,.sh.vid>img,.sh.vid>video{{position:absolute;inset:0;
@@ -163,12 +168,72 @@ p.t.e{{min-height:1em}}
 
 @media (max-width:{dkcss.MOBILE_BP}px){{
 {dkcss.mobile_scroll_release('section.slide')}
-  /* MOBILE IS NOT REVIEWED YET. The desktop canvas is the deliverable for this
-     round; this block only keeps the deck scrollable and legible on a phone so
-     the first review is not blocked. A real reflow pass comes after desktop
-     sign-off. */
-  section.slide{{align-items:stretch;min-height:0}}
-  .canvas{{width:100%;aspect-ratio:var(--ratio);container-type:size}}
+  section.slide{{align-items:stretch;min-height:100svh;padding:0}}
+  /* The canvas stops being an aspect box and becomes a full-height page.
+     It is NOT the horizontal scroller -- .strip is -- so the heading can be
+     taken out of flow against .canvas without rule 27's trap, where an
+     absolutely-positioned child of a SCROLL container travels away with the
+     content (Olay slides 4-7). */
+  .canvas{{width:100%;height:auto;min-height:100svh;aspect-ratio:auto;
+    container-type:inline-size;display:block;position:relative;
+    padding:calc(var(--pad) * 2.6) 0 var(--pad)}}
+  :root{{--pad:clamp(12px,3.6vw,20px)}}
+
+  /* Shapes go static and every inline left/top is neutralised, or a positioned
+     wrapper re-applies them as flow offsets (rule 22). */
+  .sh{{position:static !important;inset:auto !important;
+    left:auto !important;top:auto !important;
+    width:auto !important;height:auto !important;
+    transform:none !important;padding:0 !important}}
+  .sh.im>img,.sh.vid>img,.sh.vid>video{{position:static;width:100%;height:auto;
+    object-fit:contain}}
+
+  /* ---- contact sheet: one delivery format per screen ---- */
+  section[data-arch="sheet"] .canvas>.sh.tx{{position:absolute !important;
+    top:0;left:0;right:0;padding:var(--pad) !important;text-align:center;
+    font-size:3.6cqw}}
+  section[data-arch="sheet"] .canvas>.sh.tx p.t{{font-size:inherit}}
+  section[data-arch="sheet"] .canvas>.sh.tx span{{font-size:inherit !important}}
+  .strip{{display:flex;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;
+    scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;
+    gap:0;scrollbar-width:none}}
+  .strip::-webkit-scrollbar{{display:none}}
+  .cell{{flex:0 0 100%;scroll-snap-align:center;scroll-snap-stop:always;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:.6em;padding:0 var(--pad);min-width:0}}
+  /* Rule 25: size on the axis that BINDS. A 9:16 tile is height-bound; a 16:9
+     tile is width-bound. Getting this backwards is what made Olay's strips
+     unreadable. The cap is 68svh, deliberately below the viewport, so a tall
+     tile can still reach the player's visibility threshold -- see PLAYER_JS. */
+  /* !important is not decoration here. The generic `.sh{{width:auto!important}}`
+     above -- which rule 22 requires, to stop a positioned wrapper re-applying
+     the desktop inline left/top as a flow offset -- otherwise beats these more
+     specific rules and every tile computes to 0x0. Same trap as rule 33's
+     flex-basis note: a generic !important declaration outranks specificity. */
+  .cell>.sh.im,.cell>.sh.vid{{display:block;max-width:100%}}
+  .cell[data-fmt="9x16"]>.sh.im,.cell[data-fmt="9x16"]>.sh.vid{{
+    height:min(68svh,calc(100cqw * 16 / 9)) !important;width:auto !important;
+    aspect-ratio:9/16 !important}}
+  .cell[data-fmt="1x1"]>.sh.im,.cell[data-fmt="1x1"]>.sh.vid{{
+    width:min(100%,68svh) !important;height:auto !important;
+    aspect-ratio:1/1 !important}}
+  .cell[data-fmt="16x9"]>.sh.im,.cell[data-fmt="16x9"]>.sh.vid{{
+    width:100% !important;height:auto !important;aspect-ratio:16/9 !important}}
+  .cell>.sh.im>img,.cell>.sh.vid>video,.cell>.sh.vid>img{{
+    width:100%;height:100%;object-fit:contain}}
+  /* the caption rides WITH its tile, so a reader can see there are more */
+  .cell>.sh.tx{{flex:0 0 auto;text-align:center;opacity:.72}}
+  .cell>.sh.tx span{{font-size:3.2cqw !important}}
+
+  /* ---- everything else: plain vertical flow ---- */
+  section:not([data-arch="sheet"]) .canvas{{display:flex;flex-direction:column;
+    justify-content:center;gap:clamp(8px,2.4vw,14px);padding-left:var(--pad);
+    padding-right:var(--pad)}}
+  section:not([data-arch="sheet"]) .sh.im,
+  section:not([data-arch="sheet"]) .sh.vid{{flex:0 0 auto;width:100% !important}}
+  section:not([data-arch="sheet"]) .sh.rc{{display:none}}
+  p.t{{font-size:inherit}}
+  .sh.tx span{{font-size:3.4cqw !important}}
 }}
 """
 
@@ -177,8 +242,37 @@ def render(deck: dict, imgman: dict, vidman: dict) -> str:
     W, H = deck["w_pt"], deck["h_pt"]
     out = []
     for sl in deck["slides"]:
-        shapes = "".join(shape_html(s, W, H, imgman, vidman) for s in sl["shapes"])
-        out.append(f'<section class="slide" id="s{sl["n"]}" data-slide="{sl["n"]}">'
+        pairs = roles.contact_sheet(sl)
+        if pairs:
+            # The strip is inserted AT THE INDEX OF THE FIRST tile and holds only
+            # the tile/caption pairs; every other shape (the heading) stays a
+            # sibling at its own source position. That matters: on 3 of the 44
+            # sheets the heading is authored AFTER the images, and forcing it to
+            # the front would have flipped paint order on a 3%-wide box overlap.
+            # Verified: with this permutation, zero overlapping pairs change
+            # relative order across all 44 sheets, so DOM order -- and therefore
+            # paint order, rule 21 -- is preserved exactly.
+            in_strip = {id(x) for p in pairs for x in p if x is not None}
+            first = min(i for i, s in enumerate(sl["shapes"]) if id(s) in in_strip)
+            frag = []
+            for i, s in enumerate(sl["shapes"]):
+                if i == first:
+                    cells = []
+                    for tile, cap in pairs:
+                        inner = shape_html(tile, W, H, imgman, vidman)
+                        if cap is not None:
+                            inner += shape_html(cap, W, H, imgman, vidman)
+                        cells.append(f'<div class="cell" data-fmt="'
+                                     f'{roles.delivery_tag(tile)}">{inner}</div>')
+                    frag.append('<div class="strip">' + "".join(cells) + "</div>")
+                if id(s) not in in_strip:
+                    frag.append(shape_html(s, W, H, imgman, vidman))
+            shapes = "".join(frag)
+            arch = ' data-arch="sheet"'
+        else:
+            shapes = "".join(shape_html(s, W, H, imgman, vidman) for s in sl["shapes"])
+            arch = ""
+        out.append(f'<section class="slide" id="s{sl["n"]}" data-slide="{sl["n"]}"{arch}>'
                    f'<div class="canvas">{shapes}</div></section>')
     return "\n".join(out)
 
@@ -189,23 +283,72 @@ def render(deck: dict, imgman: dict, vidman: dict) -> str:
 # holds the bytes back and this starts at most MAX_PLAYING at a time.
 PLAYER_JS = """
 (function(){
-  var MAX_PLAYING = 3, playing = [];
-  function stop(v){ try{ v.pause(); v.currentTime = 0; }catch(e){} }
+  var MAX_PLAYING = 3;      // desktop worst case; the mobile carousel makes it 1
+  var DWELL_MS    = 200;    // (2) fling debounce
+  var RATIO_MIN   = 0.25;   // (1) low enough that a tall tile can reach it
+  var VIEW_MIN    = 0.60;   // (1) fallback for a tile taller than the viewport
+  var DEBUG = /[?&]debug=1/.test(location.search);   // (3)
+
+  var playing = [], timers = new WeakMap(), state = new WeakMap();
+
+  function note(v, msg){
+    state.set(v, msg);
+    if (!DEBUG) return;
+    var b = v.parentElement.querySelector('.__dbg');
+    if (!b) { b = document.createElement('b'); b.className = '__dbg';
+      b.style.cssText = 'position:absolute;left:0;top:0;z-index:9;background:#000;'
+        + 'color:#0f0;font:10px/1.3 monospace;padding:2px 4px;pointer-events:none';
+      v.parentElement.style.position = 'relative';
+      v.parentElement.appendChild(b); }
+    b.textContent = msg;
+  }
+
+  function stop(v){
+    try { v.pause(); v.currentTime = 0; } catch(e){}
+    note(v, 'stopped');
+  }
+
+  function start(v){
+    if (playing.indexOf(v) !== -1) return;
+    while (playing.length >= MAX_PLAYING) stop(playing.shift());
+    playing.push(v);
+    var p = v.play();
+    // (3) A dark video and a REFUSED video look identical without this.
+    if (p && p.then) p.then(function(){ note(v, 'playing'); })
+                      .catch(function(err){ note(v, 'REFUSED: ' + err.name); });
+    else note(v, 'playing?');
+  }
+
+  // (1) intersectionRatio is a fraction of the ELEMENT, so a tile taller than
+  // the viewport can never reach a 0.5 threshold and would never play. Accept
+  // EITHER a decent fraction of the element OR a decent fraction of the screen.
+  function visible(e){
+    if (e.intersectionRatio >= RATIO_MIN) return true;
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    return e.intersectionRect && vh && (e.intersectionRect.height / vh) >= VIEW_MIN;
+  }
+
   var io = new IntersectionObserver(function(entries){
     entries.forEach(function(e){
       var v = e.target;
-      if (e.isIntersecting && e.intersectionRatio >= 0.5) {
-        if (playing.indexOf(v) !== -1) return;
-        while (playing.length >= MAX_PLAYING) stop(playing.shift());
-        playing.push(v);
-        var p = v.play(); if (p && p.catch) p.catch(function(){});
+      clearTimeout(timers.get(v));
+      if (e.isIntersecting && visible(e)) {
+        // (2) Snap is released on mobile, so one fling crosses many slides and
+        // each would start a fetch of a 3-5 MB file that the next leave abandons.
+        // Require the tile to hold still before spending bytes.
+        timers.set(v, setTimeout(function(){ start(v); }, DWELL_MS));
       } else {
         var i = playing.indexOf(v);
         if (i !== -1) { playing.splice(i, 1); stop(v); }
       }
     });
-  }, {threshold:[0, 0.5]});
-  document.querySelectorAll('video').forEach(function(v){ io.observe(v); });
+  }, {threshold:[0, 0.25, 0.5, 0.75]});
+
+  document.querySelectorAll('video').forEach(function(v){
+    io.observe(v); if (DEBUG) note(v, 'idle');
+  });
+
+  if (DEBUG) window.__player = {playing: playing, state: state};
 })();
 """
 
