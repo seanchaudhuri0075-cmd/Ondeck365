@@ -422,8 +422,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);heigh
         </div>
         <div class="r2f">
           <label>Deck Name (folder prefix)</label>
-          <input type="text" id="r2Deck" placeholder="clientname-deck" />
-          <div class="r2h">Files stored as /deckname/video-1.mp4 — <strong>not remembered between decks; set it every time</strong></div>
+          <input type="text" id="r2Deck" placeholder="clientname-deck" oninput="updR2Dest()" />
+          <div class="r2h">Files stored as /deckname/<em>build-id</em>/video-1.mp4 — <strong>not remembered between decks; set it every time</strong></div>
         </div>
         <div class="r2f">
           <label>Auth Token</label>
@@ -1397,6 +1397,35 @@ async function exportDeck(){
 
 function fileToDataUri(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(file)})}
 
+/* ═══ Per-publish build id ═══
+   Every publish writes to `<slug>/<build-id>/`, never to `<slug>/` directly.
+   A wrong slug then lands in a directory that collides with nothing, so NO
+   existing object can ever be overwritten -- a wrong prefix becomes a cosmetic
+   naming error instead of another client's deck losing 24 image ordinals.
+   It also retires the repair problem: R2 serves
+   `Cache-Control: max-age=31536000, immutable`, so an overwritten key cannot be
+   corrected at the edge or in browsers for up to a year. Every publish now
+   produces new URLs, so there is nothing to correct.
+   Cost is storage: superseded directories linger. Pruning them is a decision,
+   not a requirement -- and it is safe only once no published HTML points at
+   them. (NOTES 2026-08-25 mitigation 3, deferred through three decks.) */
+let r2BuildId='';
+function newBuildId(){const d=new Date(),p=n=>String(n).padStart(2,'0');
+  /* Four random base36 characters, not decoration. The timestamp alone has
+     one-second resolution, so two uploads started in the same UTC second would
+     share a directory and overwrite each other -- the exact failure this whole
+     change exists to remove. "Unlikely in a manual flow" is the reasoning that
+     left the Deck Name field unguarded through three decks. */
+  const r=crypto.getRandomValues(new Uint32Array(1))[0].toString(36).padStart(7,'0').slice(-4);
+  return d.getUTCFullYear()+p(d.getUTCMonth()+1)+p(d.getUTCDate())+'-'
+        +p(d.getUTCHours())+p(d.getUTCMinutes())+p(d.getUTCSeconds())+'-'+r}
+/* Show the operator the exact prefix before they commit to it. */
+function updR2Dest(){const el=document.getElementById('r2Dest');if(!el)return;
+  const dn=document.getElementById('r2Deck').value.trim();
+  el.innerHTML=dn
+    ?'Writing to <strong>'+escH(dn)+'/'+r2BuildId+'/</strong> — a fresh directory, so nothing existing can be overwritten'
+    :'<strong>Set the Deck Name above.</strong> Files will go to <em>&lt;deck-name&gt;/'+r2BuildId+'/</em>'}
+
 /* ═══ R2 Settings persistence ═══ */
 /* Worker URL and Auth Token are PER-OPERATOR and persist. The Deck Name is
    PER-DECK and deliberately does NOT: it is never written to localStorage and
@@ -1442,7 +1471,7 @@ function collectMedia(){
 let r2LocalFileMap={};
 function openR2Modal(){
   if(!rawHTML){toast('Load a deck first');return}
-  loadR2();r2LocalFileMap={};
+  loadR2();r2LocalFileMap={};r2BuildId=newBuildId();
   const items=collectMedia(),list=document.getElementById('r2List');
   const hasRelative=items.some(it=>it.needsFile);
 
@@ -1457,6 +1486,7 @@ function openR2Modal(){
       h+='<span id="r2FolderStatus" style="font-size:10px;color:var(--tx2);margin-left:8px"></span>';
       h+='</div>';
     }
+    h+='<div id="r2Dest" style="margin-bottom:10px;padding:8px 10px;border-radius:6px;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.2);font-size:11px;color:var(--tx2)"></div>';
     h+='<div style="margin-bottom:10px;font-size:11px;color:var(--tx2)">Found <strong style="color:var(--r2)">'+items.length+'</strong> media files to upload</div>';
     items.forEach((it,i)=>{
       const label=it.needsFile?'⚠ local path: '+escH(it.relPath):fmtB(it.size);
@@ -1470,6 +1500,7 @@ function openR2Modal(){
      defeats the whole point of clearing it. Open on either. */
   if(!document.getElementById('r2Url').value.trim()
      ||!document.getElementById('r2Deck').value.trim())document.getElementById('r2Cfg').open=true;
+  updR2Dest();
   document.getElementById('r2Modal').classList.add('open');
 }
 function closeR2(){document.getElementById('r2Modal').classList.remove('open')}
@@ -1537,6 +1568,8 @@ async function doR2Upload(){
   if(!deckName){document.getElementById('r2Cfg').open=true;
     document.getElementById('r2Deck').focus();
     toast('Enter the Deck Name (folder prefix) before uploading');return}
+  const buildId=r2BuildId||newBuildId();
+  const prefix=deckName+'/'+buildId;
   saveR2();
 
   const items=collectMedia();
@@ -1557,7 +1590,7 @@ async function doR2Upload(){
         blob=file;
       }
       else{blob=dataUriToBlob(it.src)}
-      const fd=new FormData();fd.append('file',blob,it.fn);fd.append('path',deckName+'/'+it.fn);
+      const fd=new FormData();fd.append('file',blob,it.fn);fd.append('path',prefix+'/'+it.fn);
       const hdrs={};if(authToken)hdrs['X-Auth-Token']=authToken;
       const resp=await fetch(workerUrl+'/upload',{method:'POST',headers:hdrs,body:fd});
       if(!resp.ok)throw new Error('HTTP '+resp.status);
@@ -1588,7 +1621,7 @@ async function doR2Upload(){
     }
     const saved=cur;cur=-1;silentParse();cur=Math.min(saved,slides.length-1);if(cur<0)cur=0;
     renderList();renderEdit();updatePendingUI();
-    toast(ok+'/'+items.length+' files uploaded to R2 — URLs replaced');
+    toast(ok+'/'+items.length+' files uploaded to '+prefix+'/ — URLs replaced');
   }else{toast('Upload failed — check Worker URL and auth token')}
   btn.disabled=false;btn.textContent='☁ Upload All';
 }
@@ -1630,11 +1663,12 @@ async function doR2Silent(){
   const authToken=document.getElementById('r2Token').value.trim();
   if(!workerUrl)throw new Error('No Worker URL configured');
   if(!deckName)throw new Error('No Deck Name (folder prefix) set');
+  const prefix=deckName+'/'+newBuildId();
   const items=collectMedia();if(!items.length)return;
   const urlMap={};
   for(const it of items){
     const blob=it.isLocal?it.localFile:dataUriToBlob(it.src);
-    const fd=new FormData();fd.append('file',blob,it.fn);fd.append('path',deckName+'/'+it.fn);
+    const fd=new FormData();fd.append('file',blob,it.fn);fd.append('path',prefix+'/'+it.fn);
     const hdrs={};if(authToken)hdrs['X-Auth-Token']=authToken;
     const resp=await fetch(workerUrl+'/upload',{method:'POST',headers:hdrs,body:fd});
     if(!resp.ok)throw new Error('R2 HTTP '+resp.status);
