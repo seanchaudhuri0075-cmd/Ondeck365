@@ -75,6 +75,63 @@ _BUNDLED_FONTS = (
     ("Big Shoulders", "BigShoulders-Bold.ttf", 700, "ttf", "font/ttf", None),
 )
 
+# Opt-in families, requested by name via font_face_css(families=...).
+# These are NOT in the default bundle: font_face_css() with no arguments
+# must keep emitting exactly the _BUNDLED_FONTS block above, because every
+# existing template inlines its output and the P&G slides are baselined
+# byte-for-byte (NOTES.md). A new deck's families ride here instead.
+#
+# (family, filename, weight, format, mime, unicode-range, font-stretch)
+_OPTIONAL_FONTS = {
+    # Archivo variable (wght 100-900, wdth 62-125), SIL OFL.
+    # Matched-metric substitute for Franklin Gothic Book at wdth=94 —
+    # measured, not assumed. Every text box in the Olay deck carries
+    # <a:spAutoFit/>, so PowerPoint stored the exact height each string
+    # wrapped to in the real font; solving that gives the true line count
+    # per box. Archivo at wdth=94 reproduces all 20 boxes exactly (valid
+    # window 93.5-95.0). Libre Franklin — the obvious lineage match, being
+    # a Franklin Gothic revival — is 8.7% too wide and fails the same test,
+    # which is rule 10 in miniature: the fit belongs to the font pair, not
+    # to the name. Also carries the Aptos fallback at wdth=100 for the
+    # deck's inherited runs, hence keeping the wdth axis rather than
+    # shipping a static instance.
+    "Archivo": (
+        ("Archivo", "Archivo-var.woff2", "100 900", "woff2-variations", "font/woff2", None, "62% 125%"),
+    ),
+    # Poppins SemiBold, SIL OFL. Substitute for Boston SemiBold (Latinotype
+    # geometric sans, "slightly rounded-edged ... inspired by Trenda").
+    # UNVERIFIED metrically: Boston appears on only 52 characters across
+    # three short strings, and every candidate fits those boxes with 20-30%
+    # width to spare, so the autofit oracle cannot discriminate. Chosen on
+    # design class (geometric, generous x-height 0.554) — swap freely if
+    # the licensed original turns up.
+    # HenHouse (deck 8). Montserrat instanced at wght=800, SIL OFL, subset to
+    # Latin + smart punctuation (9.7 KB). Substitute for Gotham Black, chosen
+    # on measurement rather than lineage: the deck's one Gotham box is
+    # <a:spAutoFit/> at 60pt with 228.8pt of authored inner width, holding
+    # "MAKES" on a single line. Montserrat wght=900 needs 231.3pt and would
+    # have wrapped; wght=800 needs 228.7pt. Static instance rather than the
+    # variable font because only this one weight is ever set.
+    "Montserrat": (
+        ("Montserrat", "Montserrat-800.woff2", 800, "woff2", "font/woff2", None, None),
+    ),
+    "Poppins": (
+        ("Poppins", "Poppins-600.woff2", 600, "woff2", "font/woff2", None, None),
+    ),
+    # Old Spice (deck 7). Reuses the binaries already bundled by default for
+    # P&G rather than shipping a second copy — exposed here as an opt-in family
+    # so a deck can request Barlow Condensed WITHOUT pulling in the whole
+    # default bundle (Liberation Sans, Big Shoulders) it does not use.
+    # Substitute for DIN Pro Condensed; see font_calibration.MATCHED_METRIC_SUBS
+    # for why that pairing is provisional.
+    "Barlow Condensed": (
+        ("Barlow Condensed", "BarlowCondensed-400.woff2", 400, "woff2", "font/woff2",
+         _BARLOW_UNICODE_RANGE, None),
+        ("Barlow Condensed", "BarlowCondensed-700.woff2", 700, "woff2", "font/woff2",
+         _BARLOW_UNICODE_RANGE, None),
+    ),
+}
+
 # Bundled-family name each typeface-resolution fallback should try, keyed
 # by the same lowercased-typeface-keyword matching used elsewhere in the
 # renderer. Deliberately small and explicit rather than a broad heuristic:
@@ -89,26 +146,51 @@ BUNDLED_FALLBACKS = {
     "univers condensed light": "Barlow Condensed",
     "din": "Barlow Condensed",
     "din condensed": "Barlow Condensed",
+    # Olay — see _OPTIONAL_FONTS. Only reachable when a caller asks for
+    # those families, so this stays inert for the default bundle.
+    "franklin gothic book": "Archivo",
+    "aptos": "Archivo",
+    "boston semibold": "Poppins",
 }
 
 
-@lru_cache(maxsize=1)
-def font_face_css() -> str:
+@lru_cache(maxsize=8)
+def font_face_css(families: tuple[str, ...] | None = None) -> str:
     """One @font-face declaration per (family, weight), binary inlined as a data URL.
+
+    With no argument, emits exactly the default `_BUNDLED_FONTS` block —
+    unchanged output for every existing template and baseline. Pass
+    `families` to emit an opt-in set from `_OPTIONAL_FONTS` instead, for a
+    deck that needs its own typefaces without paying for (or perturbing)
+    the default bundle.
 
     Cached because the base64 encoding is non-trivial and the result
     never changes across renders in the same process.
     """
+    if families is None:
+        entries = [(*e, None) for e in _BUNDLED_FONTS]
+    else:
+        entries = []
+        for name in families:
+            if name not in _OPTIONAL_FONTS:
+                raise KeyError(
+                    f"unknown optional font family {name!r}; "
+                    f"known: {sorted(_OPTIONAL_FONTS)}"
+                )
+            entries.extend(_OPTIONAL_FONTS[name])
+
     rules = []
-    for family, filename, weight, fmt, mime, unicode_range in _BUNDLED_FONTS:
+    for family, filename, weight, fmt, mime, unicode_range, stretch in entries:
         path = FONT_DIR / filename
         b64 = base64.b64encode(path.read_bytes()).decode("ascii")
         range_line = f"\n  unicode-range: {unicode_range};" if unicode_range else ""
+        stretch_line = f"\n  font-stretch: {stretch};" if stretch else ""
         rules.append(
             f"@font-face {{\n"
             f"  font-family: '{family}';\n"
             f"  font-style: normal;\n"
-            f"  font-weight: {weight};\n"
+            f"  font-weight: {weight};"
+            f"{stretch_line}\n"
             f"  font-display: swap;\n"
             f"  src: url(data:{mime};base64,{b64}) format('{fmt}');"
             f"{range_line}\n"
