@@ -740,3 +740,83 @@ should be raised with whoever owns the Worker.
 **Until at least one of these lands, the standing instruction stands and gets
 worse with this deck:** read the field, clear it, type `venus-hestia`, verify,
 then upload — with ~225 objects at stake instead of Old Spice's 29.
+
+---
+
+## 12. Mobile build REJECTED at review — parked, not iterated (2026-08-26)
+
+**Status: desktop is signed off and unchanged. Mobile needs rework from the
+start, to be walked through screen by screen with Sean.**
+
+### The rejected build
+
+| | |
+|---|---|
+| commit | **`24aff67c865ed69e92336fc1ce50c0c79ff3f1e4`** (`24aff67`) |
+| dated | 2026-08-26 10:36:23 -0400 |
+| subject | *deck9 mobile: format-contact-sheet carousel + hardened IntersectionObserver player* |
+| verdict | **rejected — scroll feel is wrong, and the treatment overall needs rework** |
+
+**Nothing is lost.** That commit is on `main` in this repo and is not being
+removed. The staging site was generated entirely from it plus the source PPTX,
+so the whole build is reproducible:
+
+```
+git checkout 24aff67 -- phase_1c/venus_hestia
+PYTHONPATH=. python3 -m phase_1c.venus_hestia.render
+```
+
+The staging repo `venus-hestia-scrolltest-deck` was **deleted from GitHub** the
+same day. It was a diagnostic artefact with no CNAME, and it held only
+`index.html` + `assets/`, both regenerable. Deleting it was to stop a rejected
+build sitting on a public URL, not to discard work.
+
+### What was in it, so the next attempt starts informed rather than from zero
+
+Some of it may survive rework, some clearly will not. None of it is settled.
+
+- **The carousel premise.** 44 of 64 slides are format contact sheets — one
+  creative in two or three delivery ratios, captioned. The build put one format
+  per screen in a horizontal swipe. **The premise is what needs re-examining
+  first**, since scroll feel was the headline complaint and a horizontal
+  scroller nested inside a vertical one is a plausible cause.
+- **The detector still looks sound and is worth keeping** regardless of what
+  replaces the carousel: it separates the 44 sheets from the other 20 by
+  MEASUREMENT (media box aspects within 6% of a delivery ratio, pairwise
+  distinct), with no false positives and a 30/14 two-up/three-up split matching
+  the survey. `roles.contact_sheet()`.
+- **The paint-order work is reusable.** Grouping tiles with their captions
+  reorders the DOM; the build inserts the strip at the first tile's index and
+  leaves the heading a sibling at its own source position, because on 3 of the
+  44 sheets the heading is authored AFTER the images and forcing it first flips
+  paint order across a 3%-wide box overlap. Verified zero flips.
+- **The player hardening is independent of the layout** and should be carried
+  forward: threshold 0.25 plus a visible-height fallback (a tile taller than the
+  viewport can never reach ratio 0.5), a 200 ms dwell against fling thrash, and
+  `?debug=1` painting per-tile state so a dark video is distinguishable from a
+  refused one.
+- **Range support was verified on the real origin**, not inherited from
+  HenHouse: GitHub Pages returned 206 with exactly 1024 bytes for
+  `bytes=0-1023`. That answer holds for the next staging repo too.
+- **Known and still unfixed:** the 12 "brief" slides (8, 11, 15, 17, 21, 28, 32,
+  36, 40, 47, 54, 61) are label/value spec forms. Flattening to DOM order groups
+  every label together and then every value, so the pairing is lost — the
+  problem HenHouse solved with `.band.pairs` grid interleaving. All 12 share the
+  same 8 labels, so it is mechanical once the surrounding treatment is settled.
+
+### What did NOT change and is not in question
+
+- **Desktop is signed off and byte-identical.** Verified against the pre-mobile
+  build at the time: desktop CSS byte-identical, rendered result identical
+  across 669 shapes (class, geometry to 3dp, text), zero differences. The mobile
+  work was confined to the `max-width:820px` query plus two `display:contents`
+  wrappers.
+- The scroll gate is still emitted from `deckkit` byte-identical at `MOBILE_BP`.
+- No R2 object, no live deck, and no published hostname was touched at any
+  point. The staging repo never had a CNAME.
+
+### Next session
+
+Do not re-run the rejected treatment. Start from a screen-by-screen walkthrough
+with Sean before writing any CSS — the rejection was of the approach, not of a
+detail, and guessing a second time costs another full build.
