@@ -612,3 +612,110 @@ iPhone-AirDrop-verifiable, external = not"*. Deck 9 cannot be fully inlined
   scroll sign-off.
 - Never review deck 9 from a local file. If a build cannot be reached over
   HTTPS, it cannot be reviewed.
+
+---
+
+## 11. Content-derived slug — investigation, NOT yet implemented (2026-08-26)
+
+**Instruction: do not plan to type `venus-hestia` into the Deck Name field.
+Typing into that field IS the failure mode.** This section reports what a
+content-derived slug would take. Nothing here is built.
+
+### What the editor does today — read from source, all four call sites
+
+The Deck Name field is `<input type="text" id="r2Deck">`. Its entire data flow:
+
+| | |
+|---|---|
+| **Read** | `doR2Upload()` and `doR2Silent()`, both as `getElementById('r2Deck').value.trim() \|\| 'deck'` |
+| **Written by code** | **exactly one place** — `loadR2()`, restoring `s.deck` from `localStorage['deckR2']` |
+| **Written by human** | typing |
+| **Persisted by** | `saveR2()`, on every upload |
+
+And the decisive finding:
+
+```js
+function loadFile(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();
+  r.onload=ev=>{rawHTML=ev.target.result;fullParse();toast('Loaded '+slides.length+' slides')};
+  r.readAsText(f)}
+```
+
+**`loadFile()` keeps nothing about the document it loaded — not the title, not
+even the filename.** The editor reads no `<meta>`, no `data-*` on `<html>`, and
+no `<title>` for any configuration purpose anywhere. So the answer to "can the
+editor take the slug from the deck" is **no, and not narrowly** — the plumbing
+does not exist. It is a small amount of new code, not a setting.
+
+### The smallest fix is a DELETION, not an addition
+
+`saveR2()` persists `{url, deck, token}`. Worker URL and auth token are
+genuinely **per-operator** and should persist. **The deck name is per-deck and
+must not.** Dropping `deck` from the persisted object — one clause removed from
+`saveR2()`, one `if(s.deck)` removed from `loadR2()` — means the field starts
+**empty on every load**. That alone retires the entire failure mode:
+
+> An empty field is a visible prompt. A pre-filled wrong one is not.
+
+Old Spice inherited `olay/` because the field silently held the previous
+session's value and rendered correctly afterwards. It could not have inherited
+an empty field.
+
+### Full content-derived version, if the editor is to change
+
+1. **The builder emits the slug it intends** — `<meta name="deck-slug"
+   content="venus-hestia">` in `<head>`. Pipeline-controlled, declarative, no
+   derivation heuristic to get wrong. Slugifying `<title>` or the filename is
+   strictly worse: both are guesses, and a title changes for editorial reasons.
+2. **`loadFile()` reads it** after `fullParse()`, and then:
+   - declared → set the field, `readOnly = true`, badge it "from document";
+   - **not** declared → **clear** the field and disable the upload button until
+     something is typed. Never carry a value across documents.
+3. `loadR2()` stops restoring `deck` (the deletion above).
+
+Size: roughly **10 lines in one file**, no build step — the editor is a single
+static HTML document.
+
+**A caveat that matters more than the diff.** `Deck_Editor_v14.html` lives in
+`~/Downloads`, is **not in this repo, not in any repo**, and has no history. The
+highest-risk control in the pipeline sits in an unversioned file in a Downloads
+folder, and any edit to it is unrecoverable. Vendoring a copy in is worth doing
+first — but note its Worker URL placeholder contains the real endpoint, which
+NOTES deliberately keeps out of this public repo, so it must be scrubbed before
+any copy is committed.
+
+### If the editor is not to change — four places the slug can be derived and verified
+
+Ranked by value against cost. **(d) is the one to do first regardless.**
+
+- **(a) Build side — emit and record.** The builder writes the slug into the
+  document *and* a sidecar `out/<deck>/publish.json`. Costs nothing, and is a
+  precondition for (b). No protection on its own.
+- **(b) Post-upload, pre-push verifier.** Parse the exported HTML; assert every
+  `img`/`video` `src`/`poster` matches `https://<media-host>/<expected-slug>/`,
+  and that the count balances against the asset manifest. Deterministic, runs
+  in seconds, catches a wrong prefix **before the deck goes live**. Worth having
+  even with the editor fixed: it is the only check that covers an operator
+  overriding a correct auto-filled value. **But it detects after the bytes have
+  already landed** — it protects this deck, not the one that got clobbered.
+- **(c) Worker side — the only true pre-flight.** Reject a write whose path
+  prefix is not on an allowlist, or scope the auth token per deck. This is the
+  only mitigation that **prevents** the write rather than reporting it, and so
+  the only one that protects *other* decks. Requires touching the Worker, which
+  I have not seen.
+- **(d) Namespace every publish — `<slug>/<build-id>/`.** NOTES mitigation 3.
+  Even a wrong slug then writes into a fresh directory that collides with
+  nothing, so **no existing object is ever overwritten**. It converts a data-loss
+  bug into a cosmetic naming error, and it permanently retires the
+  `Cache-Control: immutable` repair problem, since every publish produces new
+  URLs. Cheapest large win; costs only storage.
+
+### Recommendation
+
+**(d) plus the `loadR2` deletion.** Together they make a wrong slug harmless
+rather than merely unlikely — one removes the silent carry, the other removes
+the collision. Add (a)+(b) as the build-side check. (c) is the real fix and
+should be raised with whoever owns the Worker.
+
+**Until at least one of these lands, the standing instruction stands and gets
+worse with this deck:** read the field, clear it, type `venus-hestia`, verify,
+then upload — with ~225 objects at stake instead of Old Spice's 29.

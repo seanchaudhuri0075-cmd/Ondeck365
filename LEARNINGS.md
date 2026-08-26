@@ -975,6 +975,59 @@ Decks referenced: **Wheeber**, **FrameTag**, **Global ImAIge** (Global Image Fac
 
 ---
 
+---
+
+## 37. Upload media through the R2 modal, never one-click Publish — a swallowed upload ships a deck of 404s
+
+- **Symptom** — On a deck with external media (relative `src="assets/..."`), the
+  editor's one-click **Publish** reports five of six steps green and one amber
+  `⚠ skip`, then puts a deck live in which **every image and video 404s**. On a
+  deck mixing inline and relative media it additionally leaves objects written
+  to the R2 prefix with no corresponding HTML rewrite.
+- **Root cause** — Two defects compounding.
+  1. `doR2Silent()`, the **publish** flow's uploader, has no `needsFile` branch
+     — the one `doR2Upload()`, the **modal's** uploader, does have. Handed a
+     relative `src` it calls `dataUriToBlob()`, whose
+     `uri.split(',')[0].match(/:(.*?);/)` returns `null` on a plain path, and
+     throws `TypeError: Cannot read properties of null (reading '1')`.
+  2. `doPublish` wraps that call in `try{...}catch(e){setStep(...,'⚠ skip','err')}`
+     **with no rethrow.** Control falls straight through to build, create-repo
+     and push. Only `index.html` reaches `gh-pages`, so every relative path
+     resolves to nothing.
+  The uploader iterates in document order and the rewrite block sits *after*
+  the loop, so any `data:` assets ahead of the first relative one are already
+  written to the bucket when it throws while `rawHTML` is never updated at all.
+- **Rule** — Media reaches R2 through the explicit **`Upload to R2`** modal,
+  which handles both `data:` and relative-path media (**Select Media Folder** →
+  `showDirectoryPicker()` → uploads the File off disk → rewrites the `src`).
+  **The one-click `Publish` button is not used on any deck with external
+  media.** After uploading and before exporting, assert `collectMedia()`
+  returns zero `needsFile` items and that no `src` in the document is still
+  relative. A `⚠ skip` on the R2 step is a **stop, not a warning**: assume the
+  prefix is contaminated, inspect it, and move to a fresh one rather than
+  overwrite — objects are served `immutable` for a year and cannot be repaired
+  in place (see NOTES 2026-08-25 on the Deck Name field).
+  *Assertion:* before push, every `img`/`video` `src` and `poster` resolves to
+  `https://` on the media host under the **intended** prefix; count them and
+  balance against the asset manifest.
+- **Why this is worse than the Olay / Old Spice prefix collision** — that
+  collision wrote *valid images* to the wrong prefix, so both decks still
+  rendered and the damage was one client's packaging appearing on another's
+  slides. This ships a deck where **nothing** renders, and it announces itself
+  as one amber line in an otherwise green list. Both are invisible at publish
+  time; this one is also invisible in the artefact, because the HTML is
+  correct — the bytes it points at were simply never uploaded.
+- **The workaround is per-deck; the real fix is the editor** — same shape as
+  rule 36. `doR2Silent` needs the `needsFile` branch `doR2Upload` already has,
+  and that `catch` must rethrow rather than downgrade a failed upload to a
+  skipped step.
+- **Proven by** — Deck 9 pre-build capability testing, 2026-08-26. Minimal
+  2-slide fixture, three relative-path assets, local mock Worker recording what
+  it was asked to store. Modal: **3/3 uploaded from disk, 3/3 srcs rewritten**;
+  mixed inline+relative also clean. Publish: **threw, 0 uploaded, 0 rewritten**;
+  mixed inline+relative left **1 object in the bucket and 0 rewrites**. No real
+  deck, bucket or prefix was touched.
+
 ## Open gaps (not yet pinned by fixtures)
 
 - `theme_from_pptx()` has no fixtures; theme *parsing* correctness is not yet locked the
