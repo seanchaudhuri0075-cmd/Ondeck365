@@ -71,6 +71,95 @@ MATCHED_METRIC_SUBS = {
     "univers": "barlow condensed",
     "univers condensed": "barlow condensed",
     "univers condensed light": "barlow condensed",
+    # Olay (Aug 2026). See SOURCE_LINE_HEIGHT_RATIOS / MATCHED_METRIC_AXES
+    # below for how these two were derived — the first by measurement, the
+    # second by design class only.
+    "franklin gothic book": "archivo",
+    "boston semibold": "poppins",
+    # Theme minor-latin default on the Olay deck; its inherited runs resolve
+    # to Aptos, a neo-grotesque, which Archivo matches at its natural width.
+    "aptos": "archivo",
+    # Old Spice (Aug 2026). Condensed -> condensed, the same substitution class
+    # as the bundle-validated univers condensed -> barlow condensed pair, so it
+    # renders 1:1. NOT width-verified: all three <a:spAutoFit/> frames in that
+    # deck carry wrap="none", so the box width constrains nothing and the rule
+    # 17 oracle yields only a line-height ratio. Recorded as provisional.
+    "din condensed": "barlow condensed",
+    # HenHouse (deck 8). Gotham is unlicensed; reached via the weight-token
+    # fallback in classify_substitution() ("Gotham Black" -> family "gotham").
+    # Montserrat is the geometric-sans design class AND the measured fit: the
+    # authored spAutoFit box for "MAKES" at 60pt leaves 228.8pt of inner width,
+    # and Montserrat at wght=800 renders it in 228.7pt — 0.1pt spare. wght=900
+    # needs 231.3pt and would have wrapped, which the box's one-line height
+    # rules out. Provisional in the same sense as boston semibold: the oracle
+    # gives an upper bound, so 600/700 also fit; 800 is the tightest fit
+    # consistent with the box the designer drew.
+    "gotham": "montserrat",
+    # Aptos Display is the theme's major font (title placeholders on s2/s4
+    # resolve +mj-lt to it). Same design as Aptos, which already maps to
+    # Archivo; registering it keeps one family across the deck instead of
+    # letting the display cut fall to `cross` and take the 1.36x.
+    "aptos display": "archivo",
+}
+
+
+# Line-height ratio of the SOURCE face, recovered from the deck rather than
+# from the substitute. A text box carrying <a:spAutoFit/> was auto-sized by
+# PowerPoint to exactly fit its wrapped text, so
+#
+#     box_height = tIns + bIns + line_count * (ratio * font_size)
+#
+# and a deck with boxes at several different line counts over-determines
+# `ratio`. Olay's boxes step in exact 16.97pt increments at 14pt, giving
+# 1.2121 for Franklin Gothic Book; the two 20pt boxes give 1.2140 for
+# Boston SemiBold.
+#
+# This matters because the substitute's own line height is NOT the source's:
+# Archivo's intrinsic hhea ratio is 1.088, which would set this deck's body
+# copy 11% too tight. Emit line-height explicitly from this table instead of
+# letting the substitute's metrics decide.
+SOURCE_LINE_HEIGHT_RATIOS = {
+    "franklin gothic book": 1.2121,
+    "boston semibold": 1.2140,
+    # Old Spice: two 28pt frames both autofit to h=41.2pt = 7.2 + 1 x 34.0pt.
+    # Corroborated by a third frame at the inherited size (21.9 / 1.2143 =
+    # 18.03pt, independently confirming the master's 18pt default).
+    "din condensed": 1.2143,
+    # Measured on this deck's autofit boxes: Gotham Black 60pt -> 1.2129,
+    # and the inherited Aptos runs -> 1.2161 (16pt) / 1.2132 (24pt).
+    # NOTE those three agree with Olay's Franklin Gothic Book (1.2121) and
+    # Old Spice's DIN Condensed (1.2143). Five unrelated faces, one number:
+    # this ratio is PowerPoint's autofit line spacing, NOT a font metric, so
+    # it cannot be used to identify a substitute. Rule 17's line-COUNT test
+    # still discriminates (it measures wrapping, which is face-specific);
+    # its ratio test does not. Recorded here so line-height is set explicitly
+    # rather than inherited from the substitute.
+    "gotham": 1.2129,
+    "aptos": 1.2132,
+}
+
+
+# Variable-axis settings that make a substitute metric-matched. Solved
+# against the same spAutoFit oracle: at these axis values the substitute
+# wraps every authored string to the same line count the original did.
+#
+#   franklin gothic book -> Archivo wdth=94   20/20 boxes exact
+#                                             (valid window 93.5-95.0;
+#                                              wdth=100 scores 9/20)
+#
+# Absent from this table means "use the substitute's default axes".
+# Deliberately NOT applied to boston semibold: that pairing rests on design
+# class, not measurement (52 characters across three short strings, all of
+# which fit with 20-30% width to spare, so the oracle cannot discriminate).
+# Treat the Boston rendering as provisional and swap in the licensed face
+# if it becomes available.
+MATCHED_METRIC_AXES = {
+    "franklin gothic book": {"wdth": 94, "wght": 400},
+    # HenHouse: "Gotham Black" -> family gotham, weight token 900. Montserrat
+    # at wght=900 renders "MAKES"@60pt in 231.3pt against 228.8pt of authored
+    # inner width and would have wrapped; wght=800 renders it in 228.7pt.
+    # The authored box is the measurement, so 800 is what ships.
+    "gotham": {"wght": 800},
 }
 
 
@@ -105,6 +194,85 @@ CROSS_METRIC_SHADOW_THRESHOLD_PT = 88.0
 CROSS_METRIC_SCALE = 1.36
 
 
+# Foundry / release-family tokens that name a licensing cut, not a design.
+# "DIN Pro Condensed" and "DIN Condensed" are the same face for substitution
+# purposes; the suffix only says which package it shipped in.
+#
+# Stripped as whole TOKENS, never as substrings — "Proxima Nova" must not lose
+# its "Pro", and "Standard Sans" must not lose its "Std"-looking prefix.
+_FOUNDRY_TOKENS = {
+    "pro", "std", "lt", "mt", "ps", "ef", "com", "cyr", "ce", "w1g",
+    "paneuropean", "opentype", "otf", "ttf",
+}
+
+
+def normalize_typeface(typeface: Optional[str]) -> Optional[str]:
+    """Lowercase a typeface name and drop foundry/release tokens.
+
+    Added for Old Spice (deck 7), whose "DIN Pro Condensed" matched neither
+    MATCHED_METRIC_SUBS nor BUNDLED_FALLBACKS — both of which already carry a
+    "din condensed" entry — and so fell to the `cross` path and would have been
+    scaled 1.36x, i.e. rule 10's exact failure. Fixed here as normalization
+    rather than by adding a "din pro condensed" key, because a key clears one
+    deck and leaves the next Std/LT/MT cut of the same family failing the same
+    way. Every lookup against those tables should go through this.
+    """
+    if typeface is None:
+        return None
+    tokens = [t for t in typeface.lower().replace("-", " ").split() if t]
+    kept = [t for t in tokens if t not in _FOUNDRY_TOKENS]
+    return " ".join(kept) if kept else typeface.lower()
+
+
+# Weight tokens that name a WEIGHT, not a family. Unlike the foundry tokens
+# above these must NEVER be stripped unconditionally: "Boston SemiBold" and
+# "Franklin Gothic Book" are registered under their full names and stripping
+# would break both. They are used only as a FALLBACK — see
+# family_and_weight() and classify_substitution().
+#
+# Added for HenHouse (deck 8), whose only declared face is "Gotham Black".
+# The full name matches nothing, so it classified `cross` and 1.36x would
+# have fired on three 60/66pt display runs (-> 81.6/89.8pt). "Gotham" is the
+# family; "Black" is weight 900, which LEARNINGS rule 11 says to read off the
+# typeface name rather than the b flag.
+_WEIGHT_TOKENS = {
+    "thin": 100, "hairline": 100,
+    "extralight": 200, "ultralight": 200,
+    "light": 300,
+    "book": 400, "regular": 400, "normal": 400, "roman": 400,
+    "medium": 500,
+    "semibold": 600, "demibold": 600, "demi": 600,
+    "bold": 700,
+    "extrabold": 800, "ultrabold": 800,
+    "black": 900, "heavy": 900, "ultra": 900, "fat": 900,
+}
+
+
+def family_and_weight(typeface: Optional[str]):
+    """Split a typeface name into (family, weight or None).
+
+    'Gotham Black' -> ('gotham', 900).  'Arial Black' -> ('arial', 900).
+    'Univers Condensed' -> ('univers condensed', None) — 'condensed' is a
+    width, not a weight, and stays with the family.
+
+    Returns the normalized full name as the family when no weight token is
+    present, so callers can use this unconditionally.
+    """
+    name = normalize_typeface(typeface)
+    if name is None:
+        return None, None
+    tokens = name.split()
+    weight = None
+    kept = []
+    for t in tokens:
+        w = _WEIGHT_TOKENS.get(t)
+        if w is not None and weight is None and len(tokens) > 1:
+            weight = w
+        else:
+            kept.append(t)
+    return (" ".join(kept) if kept else name), weight
+
+
 def classify_substitution(typeface: Optional[str]) -> str:
     """Decide which calibration path applies for a typeface.
 
@@ -116,11 +284,20 @@ def classify_substitution(typeface: Optional[str]) -> str:
     """
     if typeface is None:
         return "inherited"
-    name = typeface.lower()
+    name = normalize_typeface(typeface)
+    # Exact name first — "boston semibold" and "franklin gothic book" are
+    # registered whole, and must keep winning over any weight-stripped form.
     if name in WEB_AVAILABLE_TYPEFACES:
         return "web"
     if name in MATCHED_METRIC_SUBS:
         return "matched"
+    # Only then: drop a trailing weight token and retry the family.
+    family, weight = family_and_weight(typeface)
+    if weight is not None and family != name:
+        if family in WEB_AVAILABLE_TYPEFACES:
+            return "web"
+        if family in MATCHED_METRIC_SUBS:
+            return "matched"
     return "cross"
 
 
