@@ -1012,3 +1012,1186 @@ This is a documented intent, not a queued task. Update or override at Phase 2+ p
   (SHELFBEAUTY's two themes match; DEMERT's two themes also match) is still
   unverified — all real multi-theme decks seen so far happen to have
   identical color schemes across themes.
+
+---
+
+# Deck 6 — Olay (P&G) "Premium BW and HBL / CGI Assets Visual Boards" (2026-08-21)
+
+Source: `OlayPremiumBWandHBL_CGI_VisualBoards_CreativeDeck.pptx`, 746.7MB,
+34 slides. Produced by **Global Image Factory** (their logo is `image3.png` on
+slides 1 and 34) — same agency as the Global ImAIge deck.
+
+Output: `out/olay/index.html` + `out/olay/assets/`. **746.7MB -> 36.5MB**
+(html 0.14 + images 5.9 + video 30.5). Build is four scripts in
+`phase_1c/olay/`: `model.py` -> `assets.py` -> `render.py` -> `validate.py`,
+with `roles.py` as the operator-tagged manifest and `capture.py` for QA.
+
+## What the intake numbers missed
+
+The deck was handed over as "34 slides, 194 shapes, 58 runs, 11 offcanvas,
+4,874 chars live text, 17 slides with text, 17 flattened images, zero
+animation, explicit_color_override_pct 0.0". Verified against the file:
+
+- **31 embedded videos, ~470MB, across 14 slides** — absent from the intake
+  entirely, and 63% of the file. Easy to miss: `videoFile` is in the `a:`
+  namespace, not `p:`, so a `p:videoFile` lookup silently finds nothing.
+- **18 slides carry live text, not 17** (s34 is "Thank You", 9 chars).
+- **"17 flattened images" is wrong in kind.** No slide is a flattened render.
+  16 slides have no live text but are compositions of individually croppable
+  tiles; s12 carries three videos. The genuinely rasterised text is **9 banner
+  assets** in an italic display serif (a third typeface, raster-only) — kept as
+  images by decision.
+- **`explicit_color_override_pct = 0.0` is true but misleading.** It is
+  measured at run level, and no run overrides colour. The deck's colour still
+  comes almost entirely from the theme — via 24 per-slide `<p:bg>` fills and 33
+  `<p:style>` fillRef/fontRef blocks. See LEARNINGS rule 19.
+- **Zero animation confirmed**, with the reason: 14 slides have `<p:timing>`,
+  but every node is media playback (31 `cMediaNode`), no `animEffect`.
+- **194 vs 184 shapes** is the design-locker split (LEARNINGS rule 18).
+
+## Deck-level classification — the spec'd heuristic misfires here
+
+`PHASE_1C_ARCHITECTURE.md` open question 1 asks whether the classifier sorts
+the known decks cleanly. **It does not sort this one.** The spec'd heuristic
+keys on explicit size overrides + animation count; Olay reads 0.0 and 0, so it
+returns **corporate** -> "spot-check only". The deck is structurally
+**creative**: *zero placeholders in all 34 slides* (every text shape is a plain
+TextBox/Rectangle, `ph=None`), a per-slide background on 24 slides, 56 shapes
+crossing the canvas edge as intentional bleed, and a stock untouched Office
+theme. Routing it to spot-check is exactly the "trusted instead of checked"
+failure the safeguard section warns about.
+
+**Recommendation: add placeholder-usage ratio as a classifier signal.** It is a
+far stronger discriminator than either current input — a corporate deck uses
+the master's placeholders, a hand-built canvas deck does not — and it is one
+cheap count per slide. Still advisory, still never authoritative.
+
+## Category badge system (decoded)
+
+`image9.png` (11724x885) is a sprite of 7 numbered chips, referenced from 15
+slides via 7 distinct `srcRect` crops. Decoded from slide 3's legend by pairing
+chip geometry against text geometry, then cross-checked against slides 9 and 10
+whose captions name the numbers in prose. Mapping lives in `roles.py`:
+1 Abstract elements / 2 Lifestyle / 3 Ambient / 4 Cinematic /
+5 Application-in-situ / 6 Sensorial / 7 Group shots.
+
+## Fonts — measured, not guessed
+
+Both source faces are unlicensed here. Every text box carries `<a:spAutoFit/>`,
+which turns the file into a metric oracle (LEARNINGS rule 17):
+
+| source | substitute | basis |
+|---|---|---|
+| Franklin Gothic Book 14pt | **Archivo** `wdth=94`, line-height **1.2121** | measured, 20/20 autofit boxes exact (valid window 93.5-95.0) |
+| Boston SemiBold 20pt | **Poppins 600**, line-height **1.2140** | design class only — 52 chars, oracle cannot discriminate. Provisional. |
+| Aptos (inherited, 18pt) | **Archivo** `wdth=100` | theme minor-latin; 6 review-sticker runs |
+
+Libre Franklin, the obvious lineage match, is **8.7% too wide** and fails the
+oracle. All three classify `matched` -> declared sizes render 1:1, no 1.36x.
+Registered in `parse/font_calibration.py` (`MATCHED_METRIC_SUBS`,
+`SOURCE_LINE_HEIGHT_RATIOS`, `MATCHED_METRIC_AXES`). Binaries are subset woff2
+(Archivo variable 45KB + Poppins 5KB) in `render/fonts/`, exposed through a new
+**opt-in** `font_face_css(families=...)` path — the no-argument default still
+emits byte-identical CSS, so the P&G baselines are untouched (asserted).
+
+## Shared-layer changes (affect other decks — re-baseline before trusting)
+
+1. `parse/slide.py::_is_design_locker` now requires visual emptiness, not just
+   the marker (rule 18). **Verified across all 52 .pptx files in ~/Downloads**
+   (`scratchpad/locker_regress.py`, old vs new predicate over every sp/pic):
+   only 24 `designElem`-marked shapes exist in the whole corpus, and exactly
+   two decks change — Olay (8 recovered) and OldSpice_Destination (2). Both
+   recovered sets are solid-filled rectangles, i.e. real content that was being
+   dropped. **FrameTag, Global Image Factory and the P&G decks are unaffected
+   (0 shapes recovered)**, so existing baselines cannot move. The 18 unit tests
+   also pass.
+2. `render/fonts.py::font_face_css()` gained an optional `families` argument.
+   Default path proven byte-identical.
+
+## Rule 15 deviation (single-DOM dual-build)
+
+Deck Editor v14 compatibility forced it; see LEARNINGS rule 22 for the full
+reasoning and the three CSS mechanics it requires. Desktop fidelity is
+unchanged from rule 15's spec.
+
+## Verification
+
+`phase_1c/olay/validate.py` — 18 assertions, all passing (editor contract,
+rules 1/3/4/5/6/7/8/9/14). LibreOffice + pdftoppm ground truth vs Playwright
+capture across all 34 slides: **still slides mean diff 3.79, video slides 9.78**.
+Four defects were found by that diff and fixed: missing `p:style` fills,
+slide-background alpha compositing, the `z-index`/stacking-context bug, and
+three separate mobile-reflow faults.
+
+**CORRECTED 2026-08-21.** An earlier version of this note attributed the
+video-slide gap wholly to "LO decoding a first video frame where we correctly
+show the authored poster." That was one contributor of three, and stating it as
+the explanation was misleading. Decomposed properly, the gap on slides 9 and 10
+(15.0 and 14.2, the two worst non-s15 slides) is:
+  1. poster-vs-first-frame decode — real, and the only one that is not a divergence;
+  2. **deliberate** review-sticker suppression — LibreOffice still draws the teal
+     box, which is 2.6% of ground-truth pixels in a high-contrast colour;
+  3. the wash-colour defect below — ~22% of each of those two slides rendered
+     35/255 too light.
+Do not read a ground-truth delta as a single cause without decomposing it; on
+these two slides the "obvious" cause accounted for the smallest share.
+
+## Internal review comments suppressed (2026-08-21, after client-deliverable review)
+
+P&G left six internal review notes in the working file — teal boxes, white text,
+on slides 9, 10 (x2), 21 (x2) and 22: "Wrong package", "This looks too fake but
+like suds & they do well", "Move forward with #5 as is", and "Move forward if
+feedback is able to be incorporated" (x3). 240 of the deck's 4,874 characters.
+**Authored in the source; the conversion introduced nothing** (verified by
+reading the shapes straight out of the .pptx zip).
+
+Found by treatment, not by matching strings — see LEARNINGS rule 23 for the
+five-property signature and why it is trustworthy. Split was 6 vs 22 with no
+overlap on any property. No sticker "furniture" (leader lines, pointers) exists,
+and nothing else in the deck is teal, so removal leaves nothing orphaned.
+
+Implementation is deliberately two-stage:
+- `model.py::_is_review_sticker` **flags** (`review_sticker: true`); the shape
+  stays in `model.json`, auditable and reversible.
+- `roles.py::SUPPRESS_REVIEW_STICKERS = True` is the per-deck **opt-in** that
+  makes `render.py` skip them, and it logs each one it drops.
+
+That split follows the advisory/authoritative rule this repo already applies to
+the deck classifier. Flip the flag to `False` to get the fidelity-complete
+render back — useful when handing something to the deck's author rather than
+their client.
+
+`validate.py` pins the outcome: exact match set (6, by slide + shape name), no
+sticker text anywhere in the output, 22 authored blocks still unflagged, and a
+deliverable total of exactly **4,634** characters. A deck revision that changes
+the set fails the build rather than silently re-leaking a comment.
+
+Also swept: **no `ppt/comments/` or `commentAuthors` parts exist**, and the four
+`notesSlides` parts contain only page numbers ("9", "12", "23", "3"). These six
+shapes were the entire exposure.
+
+Post-suppression ground-truth diff: slides 9/10/21/22 now diverge *more* from
+the LibreOffice render (LO still draws the stickers, by design), while the other
+30 slides are unchanged — median 3.92.
+
+## Mobile review round (2026-08-21) — three fixes, desktop untouched
+
+Desktop was signed off before this round. Every change lives inside the
+`@media (max-width:820px)` block or drops shapes that are invisible on desktop,
+and that was **verified by pixel diff**: all 20 non-video slides render
+byte-for-byte identically to the pre-change build (the 5 that differ are all
+video slides, differing only by decode frame timing).
+
+**1. Backgrounds boxed instead of full-bleed** — slides 2 (a `<p:bg>` blipFill),
+and 3, 8, 17, 24, 33 (a full-canvas `<p:pic>` at the bottom of the stack), plus
+the split panel rects on 4-7 and the full-slide tints on 9-10. New `backdrop`
+classification in `model.py`; on mobile these leave the flow and paint as a
+full-bleed layer. See LEARNINGS rule 24.
+
+**2. "Creative Brief" appearing twice** — slide 33 only, and the cause was not a
+stray banner: **slide 33 is slide 2 duplicated with an opaque full-canvas image
+(`image4.png`) painted over it at z=4**, with the real slide-33 content on top.
+Desktop hides the old slide by z-order alone; the mobile reflow resurrected the
+banner, both text columns and the product shot. Fixed by the occlusion rule
+(rule 24), gated by `roles.py::SUPPRESS_OCCLUDED_SHAPES`.
+
+*This supersedes the earlier "reproduce slides 2 and 33 verbatim" decision*, which
+was taken before the duplication was known to be occluded. Slide 2 still shows
+the brief in full; slide 33 now shows what it actually renders. Cost: 583 buried
+characters. Deliverable text is now **4,051** (4,874 authored - 240 review
+stickers - 583 occluded). Flip the flag to `False` to restore them.
+
+**3. Renders slides unreadable** — slides 4-7. Tiles had a width-based flex basis
+that resolved to 167x660px, taller than the viewport, so only a magnified sliver
+showed. Now sized by height (`min(58svh,520px)`, width from `aspect-ratio`), with
+the section banner lifted out of the scroll row and the split background restored.
+Three whole renders per screen, scrolling right. See LEARNINGS rule 25.
+
+`validate.py` grew 9 assertions covering both rules (occluded set pinned by slide
++ shape, "Creative Brief" appears exactly once deck-wide, backdrop slide list,
+the `aspect-ratio: auto` guard, and the height-based strip sizing).
+
+## GIF logo report + mobile spacing round (2026-08-21)
+
+Reported as the Global Image Factory logo colliding with the "Creative Brief"
+heading. **Only two GIF logo placements exist in the deck** — slides 1 and 34,
+identical geometry (`image3.png`, 9.89% x 6.45%, top-right on the desktop
+canvas, no crop, aspect 2.725 matching the asset exactly). Neither is on slide 2,
+and at 390px both render complete and undistorted at 123x45px. Nothing was
+overlapping.
+
+The real cause was **section height**: the cover reflowed to 507px on an 844px
+viewport, so slide 2 scrolled into the same screen and the cover's footer logo
+appeared next to slide 2's heading. Seven sections were shorter than the
+viewport (1, 4-7, 18, 34). Fixed with `min-height:100svh` + `align-content:center`
+on the mobile canvas — see LEARNINGS rule 26.
+
+Two further defects the same audit caught:
+- **Strip banner overlapped its tiles by 11px** on slides 4-7 — a regression from
+  the previous round. The lifted banner was sized by width (62%), so its height
+  floated to 73px while the canvas `padding-top` clearing it was a fixed 78px.
+  Now sized by height (46px) so its footprint is predictable.
+- **Logo butted against the title** on slides 1 and 34 (14px, the text box's own
+  padding). Added `margin-top:12px` on `.sh.im.logo`.
+
+`capture.py` now runs a **mobile layout audit** on every capture and hard-fails
+on: any section shorter than the viewport, any two non-backdrop shapes
+overlapping in both axes, or `document.scrollWidth` exceeding the viewport.
+That is the check that would have caught all three of these before review.
+
+Desktop re-verified pixel-identical (0.00000 across all non-video slides).
+
+## Renders ground fix (2026-08-21) — slides 4-7
+
+The two-tone ground covered only the first 390px of a 956px horizontal strip.
+Cause was dimensional, not positional: percentage widths on the absolutely-
+positioned panels resolve against the canvas **padding box** (the 390px
+viewport), not `scrollWidth`. Renders 5-7 had no ground at all, and because
+abspos children of a scroll container scroll with the content, the panels also
+slid off-screen. See LEARNINGS rule 27.
+
+Kept the split rather than flattening to one colour, on evidence: no tile
+straddles the boundary on desktop (tiles end at 53.3% and resume at 55.0%, the
+split at 55%), so it is a deliberate 4-renders-vs-3 grouping, and the tint is
+the only thing distinguishing s4 `#C7B7C5` / s5 `#B1BFDB` / s6 `#F6D3D9` /
+s7 `#D99088`.
+
+`render.py::strip_ground_metrics` maps each ground panel to the span of tiles it
+covers on the DESKTOP canvas and emits that span as `--bl-ar/--bl-px/--bw-ar/
+--bw-px`. Tile height is published once as `--th: min(58svh,520px)` and the
+panels size off the same variable, so ground and tiles cannot drift apart.
+Group assignment is derived from source geometry, not hard-coded, so it works
+for any split-ground contact sheet.
+
+Measured after: ground spans 0..956 of 956 with a 0px seam, full 844px height,
+boundary at 553 — between render 4 (ends 549) and render 5 (starts 557).
+`capture.py` now also asserts the ground is continuous across every strip slide.
+Desktop re-verified at 0.00000.
+
+## KNOWN DEFECT (open) — two fills resolve to the wrong shade on slides 9 and 10
+
+Found 2026-08-21 while fixing the same bug in deck 7, by auditing backwards.
+**Not fixed: deliberate decision not to re-ship Olay for a shade error on 2 of
+34 slides. Fix it with the next Olay change.**
+
+`Rectangle 9` (slide 9) and `Rectangle 10` (slide 10) — the full-canvas wash —
+are `<a:schemeClr val="bg1"><a:lumMod val="85000"/><a:alpha val="90000"/>`.
+`phase_1c/olay/model.py::_solid()` reads the scheme name and ignores the
+transform, so it resolves `#FFFFFF` where the correct value is `#D9D9D9`.
+Composited over the `#7030A0` slide ground that ships `rgb(241,234,246)` instead
+of `rgb(206,200,211)` — **35/255 too light**, across **~22% of each slide's
+surface** (21.6% of pixels in our build, 23.4% in ground truth).
+
+Confirmed independently: LibreOffice renders those slides at exactly
+`(206,200,211)`, the correct composite, to the digit.
+
+**Scope is exactly 2 fills.** All 43 colours the Olay builder consumed were
+re-resolved through `ColorResolver`; 41 match. **No text run is affected** — no
+Olay run declares a colour, and the six review stickers took the `p:style` path
+which already went through `ColorResolver`. The deck's other `shade`/`satMod`
+values sit in `lnRef`/`effectLst`, which that build never rendered.
+
+The fix is the one deck 7 now carries: route `_solid()` through `ColorResolver`
+with a `SCHEME_ALIASES`-expanded theme dict. Generalised as LEARNINGS rule 28.
+Re-shipping also means re-render, re-capture, desktop + mobile re-verify, and
+regenerating the 50 MB embedded file.
+
+## Single self-contained embedded file (2026-08-21)
+
+`out/olay/olay_deck_embedded.html` — **50.10 MB** (50,097,918 bytes), built by
+`phase_1c/olay/embed.py` from the folder build. All 34 slides are static markup;
+nothing is constructed at runtime.
+
+Payload floor is the assets: 36.37 MB raw -> 48.49 MB base64, of which **video is
+40.6 MB** and images 7.9 MB. There is no compressing that away inside a single
+file — if a lighter artifact is ever needed, dropping video for poster stills is
+the only lever that moves the number materially.
+
+**Duplication.** "Literal `src` on every element" and "each asset inlined once"
+cannot both hold for an asset referenced from more than one DOM site. Measured
+cost was 3.15 MB raw. 31 of the 38 repeats were avoidable: the folder build
+inlines each video poster twice, as the `<img class="poster">` underlay AND as
+the `<video poster>` attribute. The underlay is the layer rule 4 requires, so
+the attribute is dropped in the embedded build — saves ~3 MB, is still
+`src`-compliant, and pixel parity proves it changes nothing on screen. The
+remaining 8 shared assets (badge sprite at 36 sites, section art on two slides
+each) are genuinely the same bytes at different DOM sites; deduping them would
+need `<picture>`/CSS indirection, which the brief rules out.
+
+**Verified with scripts disabled** (`verify_embed.py`, JS-disabled context —
+the editor's actual view): 34 `section.slide`, ids sequential `s1..s34`, rail
+labels sequential, **138/138 `<img>` and 31/31 `<video>` carry a literal
+`data:` src**, zero `srcset`/`<picture>`/`<source>`, live text exactly **4,051**
+characters, review stickers and the occluded slide-2 copy both absent, "Creative
+Brief" present exactly once.
+
+**Pixel parity vs the folder build** (`parity.py`, videos pinned to t=0 in both
+so decode timing does not dominate): **1440px 34/34 identical**; **390px 33/34
+identical**, the one exception being slide 22 at 0.0172 mean delta — a single
+row (y=994, the bottom edge of the second video) covering 0.08% of pixels. Box
+geometry is identical to the fraction of a pixel in both builds, so that row is
+a raster blend on the video's last line, not a layout difference.
+
+## Mobile round 2 (2026-08-22) — fill, merge, carousels
+
+Desktop signed off before this round and **re-verified pixel-identical across
+all 34 slides (max diff 0.00000)**. Everything below is inside the mobile media
+query or is markup that desktop hides.
+
+**Stretch decision — REVISED 2026-08-22 after phone review.**
+`roles.KEEP_AUTHORED_STRETCH = False`. Desktop keeps the authored stretch as
+signed off; **mobile uses the true source aspect.** Reviewed on a real phone the
+1.56x horizontal stretch is worse at full-screen scale than the desktop/mobile
+divergence — a product blown up to fill the screen is the wrong place to
+reproduce it. Fill by scaling, never by distorting (rule 29).
+
+**1. Fill (rule 29).** Plates were 21.8-43.5% of the section with 238-330px dead
+above and below, because the reflow sized images from the authored 16:9 box.
+Now sized to the section at true source aspect: **39.3-82.9%, aspect exact on
+every cell** (s7 went 22.2% -> 82.9%). The intermediate stretched build measured
+28.6-64.6%; unstretching bought the rest. Two traps recorded in the rule:
+`height:100% + aspect-ratio` silently stretches rather than fits (it inflated an
+early measurement to a fake 76.3%), and a crop frame without `overflow:hidden`
+shows its neighbours.
+
+**2. Divider merge (rule 30).** Slides 4/14/24 collapse to zero height and
+overlay their destination name on 5/15/25. **The sections are not removed.**
+Measured after: 31 visible screens, **34 sections / 34 rail entries / 34
+`data-slide` / 34 `.L > .t`**, live text unchanged at 2,058. The merged title
+carries its own slide's white ground — the destination names are
+`bg1+lumMod50%` grey, right on the divider's white slide and invisible over a
+photo; recolouring would be inventing, reproducing its ground is not.
+
+**3. Carousels (rule 31).** All 24 plates are ONE image shape, so a carousel can
+only come from splitting a photograph — done with CSS crop windows over the same
+asset (the Olay badge-sprite technique), so no image bytes are created and each
+slide still has one asset and one URL. `units.py` derives the windows by
+measurement, not tagging: **15 slides split into 2-3 units, 9 correctly refuse**
+(an unfolded box dieline is one connected object; STICK+BOX and GROUP SHOT
+overlap and a cut would run through product).
+
+**The probe that lied.** The first detector tested transparency (`alpha > 8`)
+and reported *zero* splittable slides deck-wide. That looked like a clean
+negative and was a broken probe: RGBA product shots are separated by a soft
+ground shadow (alpha spans the full width — threshold `> 200` to isolate product
+from shadow), and the label artworks are RGB with no alpha at all (measure
+distance from the corner background instead). Recorded in rule 31: a detector
+returning "none anywhere" on a deck that visibly has them is a broken probe, not
+a finding.
+
+`validate.py` grew 9 assertions covering all three, including that no unit cell
+references an asset outside the manifest (i.e. nothing was sliced into new
+files) and that the merge left the section count untouched.
+
+## Mobile round 3 (2026-08-22) — unstretch + merged-header fix
+
+Desktop re-verified **pixel-identical, max diff 0.00000 across all 34**.
+
+**Unstretch.** `KEEP_AUTHORED_STRETCH = False` for mobile only. Fill went
+39.3-82.9% (from 28.6-64.6% stretched), aspect exact on every cell.
+
+**Merged headers were clipped, and the cause was not the padding.** The title
+shape carries an inline PERCENTAGE height from the desktop canvas; rule 30
+collapses the divider section to zero, so that percentage resolved to 0. The box
+became padding-only (44px + 18px, 0px content), the glyphs rendered outside it
+and were clipped. `.sh { height:auto }` did not reach it because the specific
+merged-title rule overrode position/width without restating height. Fixed by
+restating `height:auto` — recorded in rule 32 as a general consequence of
+collapsing any container.
+
+**Legibility resolved by carrying the ground, not by recolouring.** Options
+weighed were scrim / drop shadow / recolour. Chose the scrim, sourced from the
+merged slide's OWN resolved background: it preserves the authored `#808080`
+exactly, and the scrim is not invented — it is the ground the author already
+paired with that text. Drop shadow was rejected because it adds edge separation
+rather than contrast and fails precisely for mid-tone text; recolour was
+rejected as an editorial change (rules 12/14).
+
+**REVERSED BY SEAN, 2026-08-22.** Originally closed as "leave as authored" on
+the reasoning that the pipeline had not moved that text. Sean reviewed it on a
+phone and reversed the call: a deck that cannot be read on the device it ships
+to has not been converted successfully, regardless of who placed the text. The
+concept blocks on 5/15/25 now carry a mobile-only scrim. Desktop keeps the
+authored presentation, verified pixel-identical. Rule 32's scope note was
+rewritten to match — it now covers author-placed text that the reflow scales
+down, not only text the pipeline relocates.
+
+## Mobile round 4 (2026-08-22) — slide 3 (variant matrix)
+
+Desktop re-verified **pixel-identical, max diff 0.00000**.
+
+- **Cards rendered in Times.** `build_cards()` emits markup the pipeline
+  generates rather than reads from a run, and `body` declared no family, so it
+  fell through to the browser default in an otherwise Aptos deck. Fixed as
+  INHERITANCE, not a per-slide font: the deck stack is declared once as
+  `--deck-font` on `:root` and applied to `body`; authored runs still override
+  inline. Mobile type scale likewise shared (`--ms-*`) so the cards are not
+  their own scale — card body now measures 15.2px / lh 19.76px, identical to
+  `#s2 .cbi`.
+- **Grey block down the left edge** was the authored 16.5% desktop rail. Only
+  partial-width backdrop rects are dropped on a transposed slide; the
+  full-canvas rect IS the ground and stays. A first attempt hid both and exposed
+  slide 3's authored green `#4EA72E` underneath — corrected, and the width test
+  is measured (`w < 97%`), not a slide number.
+- **Overflowed the viewport by 67px.** Closed by spacing alone, type untouched
+  at deck body size. Fits one screen at >=390px (iPhone 12 through 15 Pro Max);
+  **scrolls 8px at 375, 40px at 360, 252px on an SE**, because narrower
+  viewports wrap the copy onto more lines. Options put to Sean: accept, or make
+  the cards a horizontal swipe (robust at any width, reuses the deck's carousel
+  idiom). Not resolved yet.
+- **Title ellipse became a plain header** at the top of the section (rule 33).
+  The ellipse geometry is dropped; the red fill is NOT, because the title text
+  is `#FFFFFF` — 7.42:1 on red, 1.00:1 (invisible) on the white ground it would
+  otherwise land on. Same reasoning as rule 32: drop the shape, carry the ground.
+
+## Embedded single file — Old Spice (2026-08-22)
+
+`out/oldspice/oldspice_deck_embedded.html` — **12.53 MB**, built by
+`phase_1c/oldspice/embed.py`.
+
+**Dedupe was necessary and partial.** The document holds 78 image references
+over 29 unique assets, because the carousel renders each product unit as its own
+crop of the same photo. Inlining naively: **18.29 MB** of base64 against
+**6.78 MB** of distinct bytes — 2.70x.
+
+An `<img src="data:...">` cannot share bytes with anything: each attribute
+carries its own copy. A CSS custom property can be referenced by any number of
+rules while appearing once. So carousel cells were converted from an oversized
+`<img>` to `background-image: var(--aN)`. The conversion is exact, not
+approximate — for a crop with visible fraction vw:
+
+    img         width = 100/vw %        left = -l/vw * 100 %
+    background  background-size = 100/vw %   background-position = l/(l+r) %
+
+since a percentage background-position places the image's p% point at the
+container's p% point, giving p = -left% / (width% - 100).
+
+**Solo cells were deliberately NOT converted.** A solo cell plus the desktop
+`<img>` is two copies either way, so converting buys no bytes and costs
+pixel-parity — an `<img>` and a `background-image` resample differently. Leaving
+them as images restored parity on 9 slides at zero size cost.
+
+**Every asset inlines once or twice; 25 of 29 appear twice.** The floor while
+`<img>` elements are required:
+  - 15 carousel assets: 1 desktop `<img>` + 1 shared CSS property
+  - 9 solo assets: 1 desktop `<img>` + 1 cell `<img>`
+  - the SVG wordmark: 2 imgs (slides 1 and 34)
+
+Reaching **exactly once** means dropping the desktop `<img>` for the 24 plate
+assets and painting them from the shared property too — measured at
+**~6.95 MB**, but those assets would then have no `img` element at all. That is
+not a violation of "literal src on every img" (the imgs that remain all have
+one), and a `<style>` block survives a DOMParser round-trip intact — but it
+would remove them from any editor media enumeration. **Raised with Sean, not
+decided unilaterally.**
+
+**Verified with scripts disabled:** 34 `section.slide`, ids `s1..s34`, rail
+labels sequential, 39/39 imgs carry a literal `data:` src, zero
+`srcset`/`<picture>`/`<source>`, occluded duplicate still suppressed, table +
+3 cards + 48 crop cells present.
+
+**Pixel parity vs the folder build:** desktop **34/34 identical**; mobile
+**16/31 identical**, the 15 carousel slides differing by mean 1.2-4.0. Diagnosed
+rather than assumed: uncropped cells show no shift at all and cropped cells at
+most 1px, with 27-40% of differing pixels sitting on image edges against an 11%
+edge density — i.e. `<img>` vs `background-image` resampling, not geometry.
+
+## Known limitations
+
+- `hdphoto1/2.wdp` (JPEG XR effect caches on s1/s34) are not rendered. They are
+  alternates of rasters already emitted; logged as known-unbound in the
+  coverage map rather than dropped silently.
+- Slides 2 and 33 duplicate two text boxes verbatim. Reproduced as authored per
+  rule 14; flagged to the client as an authoring issue, not fixed in the build.
+- Boston SemiBold pairing is provisional (see above).
+- On mobile, slide 3's seven legend badges reflow to a chip row at the end of
+  the slide rather than pairing with their legend lines — the source positions
+  them absolutely against two text columns, so pairing needs per-badge tagging.
+- Mobile backdrops use `object-fit: cover`, which discards the authored
+  `srcRect` framing on those few full-canvas images in exchange for a true
+  full-bleed. Deliberate, and mobile-only; desktop keeps the authored crop.
+
+
+---
+
+# Deck 7 — Old Spice "Destination Theme Product Series Concepts" (2026-08-21)
+
+Source: `OldSpice_Destination_ProductSeries_Variants_CreativeDeck_R1.pptx`,
+331.4 MB, 34 slides, 960x540pt. Output `out/oldspice/`, built by
+`phase_1c/oldspice/` (model -> assets -> render -> validate, + capture, roles).
+**331.4 MB -> 5.23 MB** (html 0.14 + assets 5.09). No video.
+
+## Shape of the deck
+
+The sparsest in the set at 2.35 shapes/slide, and the most templated: three
+identical 9-slide destination series (Maldives / Sao Paulo-Rio / Sedona) with
+the same eight product labels each. Six archetypes, one of which is 24 slides:
+
+| archetype | slides | existing `archetype.py` label |
+|---|---|---|
+| product plate | 24 | `photo_with_caption` |
+| key visual | 5, 15, 25 | `generic` |
+| destination divider | 4, 14, 24 | `title_or_cover` |
+| cover / close | 1, 34 | `generic` |
+| brief | 2 | `generic` |
+| variant matrix | 3 | `title_or_cover` (wrong — the table yields no items) |
+
+**Placeholder-usage ratio 53.3%** (24/45 text-capable shapes; 20/34 slides use
+at least one). Olay was 0.0%. Recorded only — the deck-level classifier signal
+set stays frozen through deck 9 as instructed.
+
+## Signal reconciliation (operator tooling vs this pass)
+
+Everything matched exactly — n_slides, total_runs 92, tab_positioned_runs 0,
+explicit_size_override 71.74% (66/92), explicit_color_override **100.0%
+(92/92)**, 2 typefaces, 0 animated. Two needed comment:
+
+- `total_shapes` 80 = **76 rendered + 4 designElem lockers**. Not a conflict.
+- `offcanvas_shapes` 3 is the known left-only bug. True figure: **16 distinct
+  shapes** crossing an edge (28 edge-crossings; a shape crossing two edges
+  counts twice — an earlier draft of this note said 28 shapes, which was wrong).
+  Left 3 / right 7 / top 9 / bottom 9. **13 shapes invisible to the tooling.**
+  All 16 are pictures; no text crosses an edge, so nothing risks being clipped
+  unreadable. Overhangs are systematic per series: 10/20/30 top 90pt (16.6%),
+  13/23/33 top 71pt + right 45pt, 27 right 80pt, 7/17 left 27pt + right 36pt.
+
+`explicit_color_override_pct` of 100.0 is the mirror of Olay's 0.0: text colour
+here never touches the theme, so the resolver is not load-bearing for type —
+but it IS load-bearing for fills, see the lumMod bug below.
+
+## Fonts — DIN Pro Condensed
+
+Fixed as **key normalization**, not a new table entry:
+`font_calibration.normalize_typeface()` strips foundry/release tokens
+(Pro/Std/LT/MT/...) as whole tokens before any lookup, so "DIN Pro Condensed"
+reaches the existing `din condensed` entry. Generalises for free — "Helvetica
+LT Std" now resolves to `helvetica` (web) — while "Proxima Nova" correctly
+keeps its "Pro". Without it the face fell to `cross` and **1.36x would have
+fired**: 36pt->48.96, 28pt->38.1, 24pt->32.6. Rule 10's exact failure.
+
+**Barlow Condensed vs Big Shoulders: the oracle cannot discriminate them, and
+that is the honest answer.** The only width evidence was slide 1's 0.421 em
+advance, and **all three `<a:spAutoFit/>` frames carry `wrap="none"`** — text
+overflows freely, so box width constrains nothing. What survives is the
+line-height ratio **1.2143** (two 28pt frames at h=41.2pt, corroborated by a
+third at the inherited size: 21.9/1.2143 = 18.03pt, independently confirming
+the master's 18pt default). Both candidates have an identical natural ratio of
+1.2000, so both need the same override.
+
+They are not interchangeable though: Big Shoulders' caps are **14% taller**
+(cap 0.800 / x-ht 0.600 vs Barlow 700's 0.700 / 0.514), and this deck is 41
+bold ALL-CAPS runs where cap height sets apparent size. Chose **Barlow
+Condensed 700** because `BUNDLED_FALLBACKS` already maps `din condensed` to it
+and published DIN cap heights sit near 0.72 — a reference value, not a
+measurement of this face. `fonts.py` records the opposite argument (Big
+Shoulders was picked for SHELFBEAUTY because it matches DIN's flat-topped "A").
+One-line swap; marked provisional in `MATCHED_METRIC_SUBS`.
+
+## Four bugs the build surfaced (all found by measurement, not by eye)
+
+1. **Table body text was invisible, not missing.** Cells use
+   `bg1 + lumMod 50%`; the Olay-derived `_solid()` read the scheme name and
+   ignored the transform, resolving mid-grey to white — white text on white
+   cells. The deck has **63 lumMod uses**, so this was pervasive, not local.
+   Fixed by routing fills through `ColorResolver`, which implements rule 13.
+   Note ColorResolver needs an alias-expanded theme dict (it does not know
+   bg1/tx1 -> lt1/dk1 the way `Theme.resolve` does); expanded locally rather
+   than changing the shared resolver.
+2. **Slide 3's title lost its red fill and its geometry.** Text shapes never
+   emitted a background, and `prstGeom` was assumed rect — Olay was 100% rect,
+   this deck has one `ellipse`. Both now honoured.
+3. **Bullets were dropped.** 12 bulleted paragraphs, all in the table
+   (`<a:buChar char="•">`). Olay had none so the model never read them; a list
+   was flattening into run-on lines.
+4. **Mobile slide 3 looked empty.** Two causes, neither the cards: the 16.5%
+   grey band was being stretched full-width (the full-bleed override must apply
+   to IMAGE backdrops only), and `.card` is static so it painted *beneath* the
+   positioned backdrop despite every value being in the DOM.
+
+## Carried-forward rules
+
+- **P&G review stickers: 0 matches**, and cleanly — **no shape in this deck
+  carries `<p:style>` at all**, so the signature has no surface to fire on. No
+  false positives across 43 text frames.
+- **Occlusion: 2 slides, 542 chars.** Slides 15 and 25 are the Maldives key
+  visual duplicated, covered by an opaque full-canvas image (both measured
+  100.000% opaque) with the new destination's copy on top — the Olay slide-33
+  pattern exactly. Buried Maldives text sat under the Sao Paulo and Sedona
+  slides. **Verified after build: neither slide reveals it** (desktop matches
+  ground truth; the string appears once, on slide 5, where it belongs).
+- Deliverable text **2,058** chars (2,600 authored - 542 occluded).
+
+## Editor hooks, matched to the text distribution
+
+28 of 34 slides are single-line labels, so this deck does NOT get Olay-style
+body copy. `.L > .t` on **all 34** (every slide has exactly one label/title);
+`.sl` on 1 (slide 1's "CONCEPTS"); body hooks on **five** slides only — 2
+(311), 3 (458, per table cell), 5 (271), 15 (403), 25 (219). Note the intake
+summary named three prose slides; 15 and 25 were obscured by the buried
+duplicate sitting in their character counts.
+
+## Verification
+
+`validate.py` — 30 assertions, all passing. Desktop vs LibreOffice ground truth
+across all 34: **median 4.16, mean 4.40** (Olay still-slides were 3.79). The
+worst, s3 at 12.3, is dominated by a deliberate divergence: the source says
+`prstGeom prst="ellipse"` and we render an ellipse; LibreOffice draws a
+rectangle. Per rule 16 the XML is the authority, so this is LO being wrong, not
+us — do not "fix" it toward the screenshot.
+
+Mobile: layout audit clean (no short sections, no overlaps, no horizontal page
+scroll). Mobile treatment is deliberately lighter than Olay's because the deck
+is sparse — plates overlay their label on the plate (what `archetype.py` says
+`photo_with_caption` needs), key visuals use the image as a backdrop, and only
+the table is transposed (3 stacked cards; desktop keeps the true table).
+
+## Shared-layer changes
+
+- `parse/font_calibration.py`: `normalize_typeface()` + `din condensed` entries
+  in `MATCHED_METRIC_SUBS` / `SOURCE_LINE_HEIGHT_RATIOS`.
+- `render/fonts.py`: "Barlow Condensed" added to `_OPTIONAL_FONTS`, reusing the
+  binaries already bundled by default rather than shipping a second copy.
+- Default `font_face_css()` output unchanged (md5 `e68750697422`), 18/18 tests
+  pass, so P&G baselines are untouched.
+
+## Mobile round 2 (2026-08-22) — fill, merge, carousels
+
+Desktop signed off before this round and **re-verified pixel-identical across
+all 34 slides (max diff 0.00000)**. Everything below is inside the mobile media
+query or is markup that desktop hides.
+
+**Stretch decision — REVISED 2026-08-22 after phone review.**
+`roles.KEEP_AUTHORED_STRETCH = False`. Desktop keeps the authored stretch as
+signed off; **mobile uses the true source aspect.** Reviewed on a real phone the
+1.56x horizontal stretch is worse at full-screen scale than the desktop/mobile
+divergence — a product blown up to fill the screen is the wrong place to
+reproduce it. Fill by scaling, never by distorting (rule 29).
+
+**1. Fill (rule 29).** Plates were 21.8-43.5% of the section with 238-330px dead
+above and below, because the reflow sized images from the authored 16:9 box.
+Now sized to the section at true source aspect: **39.3-82.9%, aspect exact on
+every cell** (s7 went 22.2% -> 82.9%). The intermediate stretched build measured
+28.6-64.6%; unstretching bought the rest. Two traps recorded in the rule:
+`height:100% + aspect-ratio` silently stretches rather than fits (it inflated an
+early measurement to a fake 76.3%), and a crop frame without `overflow:hidden`
+shows its neighbours.
+
+**2. Divider merge (rule 30).** Slides 4/14/24 collapse to zero height and
+overlay their destination name on 5/15/25. **The sections are not removed.**
+Measured after: 31 visible screens, **34 sections / 34 rail entries / 34
+`data-slide` / 34 `.L > .t`**, live text unchanged at 2,058. The merged title
+carries its own slide's white ground — the destination names are
+`bg1+lumMod50%` grey, right on the divider's white slide and invisible over a
+photo; recolouring would be inventing, reproducing its ground is not.
+
+**3. Carousels (rule 31).** All 24 plates are ONE image shape, so a carousel can
+only come from splitting a photograph — done with CSS crop windows over the same
+asset (the Olay badge-sprite technique), so no image bytes are created and each
+slide still has one asset and one URL. `units.py` derives the windows by
+measurement, not tagging: **15 slides split into 2-3 units, 9 correctly refuse**
+(an unfolded box dieline is one connected object; STICK+BOX and GROUP SHOT
+overlap and a cut would run through product).
+
+**The probe that lied.** The first detector tested transparency (`alpha > 8`)
+and reported *zero* splittable slides deck-wide. That looked like a clean
+negative and was a broken probe: RGBA product shots are separated by a soft
+ground shadow (alpha spans the full width — threshold `> 200` to isolate product
+from shadow), and the label artworks are RGB with no alpha at all (measure
+distance from the corner background instead). Recorded in rule 31: a detector
+returning "none anywhere" on a deck that visibly has them is a broken probe, not
+a finding.
+
+`validate.py` grew 9 assertions covering all three, including that no unit cell
+references an asset outside the manifest (i.e. nothing was sliced into new
+files) and that the merge left the section count untouched.
+
+## Mobile round 3 (2026-08-22) — unstretch + merged-header fix
+
+Desktop re-verified **pixel-identical, max diff 0.00000 across all 34**.
+
+**Unstretch.** `KEEP_AUTHORED_STRETCH = False` for mobile only. Fill went
+39.3-82.9% (from 28.6-64.6% stretched), aspect exact on every cell.
+
+**Merged headers were clipped, and the cause was not the padding.** The title
+shape carries an inline PERCENTAGE height from the desktop canvas; rule 30
+collapses the divider section to zero, so that percentage resolved to 0. The box
+became padding-only (44px + 18px, 0px content), the glyphs rendered outside it
+and were clipped. `.sh { height:auto }` did not reach it because the specific
+merged-title rule overrode position/width without restating height. Fixed by
+restating `height:auto` — recorded in rule 32 as a general consequence of
+collapsing any container.
+
+**Legibility resolved by carrying the ground, not by recolouring.** Options
+weighed were scrim / drop shadow / recolour. Chose the scrim, sourced from the
+merged slide's OWN resolved background: it preserves the authored `#808080`
+exactly, and the scrim is not invented — it is the ground the author already
+paired with that text. Drop shadow was rejected because it adds edge separation
+rather than contrast and fails precisely for mid-tone text; recolour was
+rejected as an editorial change (rules 12/14).
+
+**REVERSED BY SEAN, 2026-08-22.** Originally closed as "leave as authored" on
+the reasoning that the pipeline had not moved that text. Sean reviewed it on a
+phone and reversed the call: a deck that cannot be read on the device it ships
+to has not been converted successfully, regardless of who placed the text. The
+concept blocks on 5/15/25 now carry a mobile-only scrim. Desktop keeps the
+authored presentation, verified pixel-identical. Rule 32's scope note was
+rewritten to match — it now covers author-placed text that the reflow scales
+down, not only text the pipeline relocates.
+
+## Mobile round 4 (2026-08-22) — slide 3 (variant matrix)
+
+Desktop re-verified **pixel-identical, max diff 0.00000**.
+
+- **Cards rendered in Times.** `build_cards()` emits markup the pipeline
+  generates rather than reads from a run, and `body` declared no family, so it
+  fell through to the browser default in an otherwise Aptos deck. Fixed as
+  INHERITANCE, not a per-slide font: the deck stack is declared once as
+  `--deck-font` on `:root` and applied to `body`; authored runs still override
+  inline. Mobile type scale likewise shared (`--ms-*`) so the cards are not
+  their own scale — card body now measures 15.2px / lh 19.76px, identical to
+  `#s2 .cbi`.
+- **Grey block down the left edge** was the authored 16.5% desktop rail. Only
+  partial-width backdrop rects are dropped on a transposed slide; the
+  full-canvas rect IS the ground and stays. A first attempt hid both and exposed
+  slide 3's authored green `#4EA72E` underneath — corrected, and the width test
+  is measured (`w < 97%`), not a slide number.
+- **Overflowed the viewport by 67px.** Closed by spacing alone, type untouched
+  at deck body size. Fits one screen at >=390px (iPhone 12 through 15 Pro Max);
+  **scrolls 8px at 375, 40px at 360, 252px on an SE**, because narrower
+  viewports wrap the copy onto more lines. Options put to Sean: accept, or make
+  the cards a horizontal swipe (robust at any width, reuses the deck's carousel
+  idiom). Not resolved yet.
+- **Title ellipse became a plain header** at the top of the section (rule 33).
+  The ellipse geometry is dropped; the red fill is NOT, because the title text
+  is `#FFFFFF` — 7.42:1 on red, 1.00:1 (invisible) on the white ground it would
+  otherwise land on. Same reasoning as rule 32: drop the shape, carry the ground.
+
+## Embedded single file — Old Spice (2026-08-22)
+
+`out/oldspice/oldspice_deck_embedded.html` — **12.53 MB**, built by
+`phase_1c/oldspice/embed.py`.
+
+**Dedupe was necessary and partial.** The document holds 78 image references
+over 29 unique assets, because the carousel renders each product unit as its own
+crop of the same photo. Inlining naively: **18.29 MB** of base64 against
+**6.78 MB** of distinct bytes — 2.70x.
+
+An `<img src="data:...">` cannot share bytes with anything: each attribute
+carries its own copy. A CSS custom property can be referenced by any number of
+rules while appearing once. So carousel cells were converted from an oversized
+`<img>` to `background-image: var(--aN)`. The conversion is exact, not
+approximate — for a crop with visible fraction vw:
+
+    img         width = 100/vw %        left = -l/vw * 100 %
+    background  background-size = 100/vw %   background-position = l/(l+r) %
+
+since a percentage background-position places the image's p% point at the
+container's p% point, giving p = -left% / (width% - 100).
+
+**Solo cells were deliberately NOT converted.** A solo cell plus the desktop
+`<img>` is two copies either way, so converting buys no bytes and costs
+pixel-parity — an `<img>` and a `background-image` resample differently. Leaving
+them as images restored parity on 9 slides at zero size cost.
+
+**Every asset inlines once or twice; 25 of 29 appear twice.** The floor while
+`<img>` elements are required:
+  - 15 carousel assets: 1 desktop `<img>` + 1 shared CSS property
+  - 9 solo assets: 1 desktop `<img>` + 1 cell `<img>`
+  - the SVG wordmark: 2 imgs (slides 1 and 34)
+
+Reaching **exactly once** means dropping the desktop `<img>` for the 24 plate
+assets and painting them from the shared property too — measured at
+**~6.95 MB**, but those assets would then have no `img` element at all. That is
+not a violation of "literal src on every img" (the imgs that remain all have
+one), and a `<style>` block survives a DOMParser round-trip intact — but it
+would remove them from any editor media enumeration. **Raised with Sean, not
+decided unilaterally.**
+
+**Verified with scripts disabled:** 34 `section.slide`, ids `s1..s34`, rail
+labels sequential, 39/39 imgs carry a literal `data:` src, zero
+`srcset`/`<picture>`/`<source>`, occluded duplicate still suppressed, table +
+3 cards + 48 crop cells present.
+
+**Pixel parity vs the folder build:** desktop **34/34 identical**; mobile
+**16/31 identical**, the 15 carousel slides differing by mean 1.2-4.0. Diagnosed
+rather than assumed: uncropped cells show no shift at all and cropped cells at
+most 1px, with 27-40% of differing pixels sitting on image edges against an 11%
+edge density — i.e. `<img>` vs `background-image` resampling, not geometry.
+
+## Known limitations
+
+- The two deck builders (`phase_1c/olay/`, `phase_1c/oldspice/`) now share
+  roughly 80% of their code. Factoring them is the obvious next move, but it
+  should wait for deck 8 so the shared shape is chosen from three examples
+  rather than two — same principle as the deferred template auto-detection.
+- ~~OPEN: the "KEY VISUAL" label does not read on the mobile scrim.~~
+  **RESOLVED 2026-08-22** with a second, light ground behind the label alone
+  (Sean approved departing from the single-scrim brief). Both authored colours
+  now clear their thresholds on mobile: red `#AF000F` **7.42:1** on a white chip
+  (36pt bold needs 3:1), white body **9.8-10.7:1** on the dark scrim (needs
+  4.5:1). Neither colour was touched. The light ground shrink-wraps the label
+  into a chip rather than splitting the card into two full-width tones — a hard
+  horizontal seam reads as a rendering fault, a chip reads as an eyebrow tag.
+- Mobile carousels duplicate the asset reference per unit. Harmless for the
+  folder build (one URL, browser-cached) but an embedded single-file build would
+  inline those bytes per cell — dedupe there before shipping one for this deck.
+- No embedded single-file build produced for this deck (not requested). It
+  would be ~7 MB, since there is no video.
+
+---
+
+# HenHouse Market (deck 8)
+
+## Desktop verification — what was and was not checked (2026-08-23)
+
+**Correcting a claim made repeatedly during the mobile passes.** Every mobile
+round reported desktop as "pixel-identical", and that phrasing was wrong in a
+way worth recording rather than quietly dropping.
+
+What was actually verified: the rebuilt desktop HTML against **the previous
+desktop HTML** — flattened `.sh` sequence, class, geometry and span text
+compared build-to-build across 52 sections / 164 shapes. That is a genuine and
+useful regression check: it proves a mobile change did not disturb desktop.
+
+What was **never** verified until now: desktop against **the source deck**.
+Nothing in those passes compared a rendered slide to the PPTX. So a defect
+already present in the desktop baseline before mobile work began would survive
+every "pixel-identical" check, because both sides of the comparison carried it.
+
+That is exactly what happened. The slide-background alpha defect (LEARNINGS
+rule 35) was in the desktop build from the first render, was found during
+mobile pass 3, was fixed for mobile only on instruction, and then passed every
+subsequent desktop check — because the check was build-to-build. It surfaced
+only when the embedded file was opened against the source by eye.
+
+**Rule of thumb going forward:** "pixel-identical" without a named reference is
+not a claim. State the reference — `identical to the previous build` is a
+regression check; `matches the source` is a fidelity check. They catch
+different things and neither substitutes for the other.
+
+## Slide-background alpha (fixed 2026-08-23)
+
+13 slides carry `bg_alpha < 1.0`. `composite()` resolved each against the
+master background correctly and emitted `--bg-solid`, but only the mobile
+`.canvas` rule consumed it; desktop read the raw `rgba()` and composited
+against `section.slide{background:#111}`. Slides 1 and 52 rendered `#1B1C14`
+for a `#F6F7F0` cream. Fix: desktop `.canvas` reads `--bg-solid` too. Written
+up as LEARNINGS rule 35, with the per-breakpoint assertion added to
+`phase_1c/henhouse/validate.py`.
+
+Ground truth: a LibreOffice render of the source (media stripped to 1px
+placeholders so a 618 MB deck would convert; backgrounds are solid fills in the
+slide XML and survive intact) matches 11 of 13 to <=1/255 across alphas
+0.077-0.608. The four slides at alpha 0.32167 (12-15) render `#F2F2F2` in
+LibreOffice against our `#F8F8F8`. Unexplained: their `<p:bg>` differs from
+slides 37-40 only in the alpha value, both resolve `bg2` -> `lt2` = `#E8E8E8`
+over a white master, and the arithmetic is validated exactly at alpha 0.29.
+Solving for the ground LibreOffice appears to use gives ~`#F7F7F7` for those
+four and ~`#FFFFFF` for the rest, which is not a coherent alternative model —
+recorded as a probable LibreOffice quirk, not adopted.
+
+## Mobile scroll feel (2026-08-24)
+
+**Symptom:** one section per drag, no momentum carry.
+
+**Cause:** `section.slide{scroll-snap-stop:always}` was emitted unconditioned.
+Per CSS Scroll Snap, `always` forbids the container passing over a snap
+position during a scrolling operation, so a fling is forced to target the
+nearest snap point. That is a discrete-paging affordance — correct for a wheel
+or arrow key, wrong on an inertial surface. Released on mobile only
+(`scroll-snap-stop:normal` inside the 820px query); desktop keeps `always`.
+`scroll-snap-type`, the `#deck` container, and every height rule are untouched.
+
+**Reference build (Patchology / Global Image Factory) — what it actually does,
+after reading the file rather than grepping its CSS.** It does NOT release the
+snap container on mobile. At `max-width:767px` it sets `.deck{display:none}`
+and shows `#mob-view`, a **separate hand-authored mobile DOM**: `position:fixed;
+inset:0; overflow-y:auto`, a flex column of 15 `.mob-section` blocks with
+`.mob-img{width:100%;height:auto}` and 3px gaps. There is no snap on mobile
+because there is no deck on mobile. Zero `scroll-snap-stop` in the whole file.
+Two `<script>` tags, so it is not the zero-script pattern either.
+
+**A dead-consumer defect in that file, worth logging as its own instance.**
+The deck element is `<div class="deck" id="deck">` — one element, both
+selectors. The queries are:
+
+| query | effect |
+|---|---|
+| `max-width:767px` | shows `#mob-view`, **hides `.deck`** |
+| `max-width:768px` | "Unlock page scroll" — `#deck{scroll-snap-type:none;height:auto;overflow:visible}` |
+| `min-width:768px` | hides `#mob-view` |
+
+The unlock block's only live window is **767px < width <= 768px**, where the
+deck is still displayed. At every real phone width its target is
+`display:none`, so it does nothing. Same family as LEARNINGS rule 20/35: a
+correctly-authored rule whose consumer is never live. The tell is identical —
+it reads as intentional in review and is inert in the browser. Not fixed here;
+it belongs to the Global Image builder, and is recorded so the next person
+reading that file for a scroll reference does not take the block at face value
+the way this session initially did.
+
+**Method note.** The first pass at this diagnosis extracted the CSS rules and
+diffed them without checking which DOM they applied to, and concluded that
+Patchology "releases the snap container on mobile". That was wrong. Grepping
+declarations answers *what is written*; it does not answer *what is live*. For
+any breakpoint question, resolve the selector against the DOM at that width
+before drawing a conclusion.
+
+
+## Diagnostic artefact — `henhouse_DIAGNOSTIC_no-video-bytes_DO-NOT-SHIP.html` (2026-08-24)
+
+**21.03 MB. NOT A DELIVERABLE. Never to the Deck Editor, never to R2, never to
+a client.** The name carries the warning because a 21 MB file that opens and
+scrolls correctly is otherwise indistinguishable from a shippable one.
+
+**What it is:** the embedded build with the seven `<video>` elements intact —
+poster, `autoplay muted loop playsinline preload="none"`, and the shape's
+`--ar` — but with the `src` attribute removed entirely, so no media bytes and
+no external reference. It exists to separate two symptoms the 63.14 MB file
+conflates: scroll-snap behaviour (fixed by `scroll-snap-stop:normal`) and
+decode/memory pressure from 63.0 MB of base64. Built with
+`python3 -m phase_1c.henhouse.embed --diagnostic`; the deliverable path is
+untouched by that flag (md5 verified identical across the run).
+
+**Why the src is stripped rather than pointed at a file.** An external
+`src="assets/vid_*.mp4"` was the obvious alternative and is wrong here for
+three separate reasons, all pre-existing and already recorded:
+
+1. **iOS `file://` sandbox** — NOTES (P&G, Phase 2 video decision): *"inline =
+   iPhone-AirDrop-verifiable, external = not"*. Opened from Files on a phone the
+   videos would not load at all, so a smoother scroll would prove nothing: the
+   comparison becomes 63 MB-with-video against 21 MB-with-no-video-loading.
+2. **The R2 publish path does not exist *in this pipeline*.** NOTES:
+   *"Architectural design intent — not yet implemented"*. **AMENDED 2026-08-24:
+   true of the pipeline code, false as a statement about how decks are actually
+   published — see "How decks are really published" below. Decks ARE live, and
+   GAP has served media externally over HTTPS since May 2026.**
+3. **Deck Editor v14's handling of relative asset URLs is undocumented.** Rule
+   22 pins that it uses `DOMParser`, runs no JS, keys on `class="slide"` and
+   finds media through `img` elements. Whether it resolves a sibling `assets/`
+   directory is recorded nowhere, and was not guessed at.
+
+**Precedent check (as it stood before 2026-08-24):** every embedded file
+*produced by this pipeline* is fully self-contained — Old Spice 0 external
+refs, Olay 0 (32 videos, all `data:video/mp4`), HenHouse 0. **AMENDED: right
+about the pipeline's own output, wrong as a claim about published decks. GAP
+has shipped multi-file with external media since May 2026.**
+
+**AMENDMENT 2026-08-24 — the diagnostic and the published variant are two
+different artefacts.** The "never to a publish path" line above still stands
+for THIS file (`henhouse_DIAGNOSTIC_no-video-bytes_DO-NOT-SHIP.html`): it has
+no video at all and would misrepresent the deck. It was not published. A
+SEPARATE multi-file variant was built and published for the phone test — see
+"Published scroll-test variant" below. Nothing here was overridden; a different
+artefact was made for the job this one could not do.
+
+## How decks are really published (established 2026-08-24)
+
+NOTES previously implied the only publish path was an unimplemented Cloudflare
+migration. That was wrong, and wrong in the direction that matters: decks have
+been live for months. The actual mechanism, read off DNS and response headers
+rather than from memory:
+
+**HTML — GitHub Pages, one public repo per deck.** Repos named `<slug>-deck`
+under `seanchaudhuri0075-cmd`, content on a **`gh-pages`** branch at path `/`,
+custom domain set by a `CNAME` file in that branch. `globalimaige.com` runs on
+Cloudflare nameservers (`violet`/`rory.ns`), and each deck subdomain is CNAME'd
+to `seanchaudhuri0075-cmd.github.io` **DNS-only** — it resolves straight to the
+GitHub Pages IPs (185.199.108-111.153), so Cloudflare does DNS and nothing else
+for those hostnames. No wrangler, no `r2 object put`, no CI.
+
+**Media — Cloudflare-fronted object storage at `media.globalimaige.com`**,
+proxied (104.26.x / 172.67.x), `server: cloudflare`, MD5-shaped etags, range
+requests supported. Every signal says R2 behind a custom domain. Laid out as
+`/shared/<deck>/<group>/<file>`.
+
+**Two publishing shapes coexist; the choice is per deck:**
+
+| deck | repo size | shape |
+|---|---|---|
+| Patchology | 20 MB | single self-contained `index.html` (26.87 MB) + `CNAME` |
+| GAP | 382 MB | small `index.html` (127 KB) + `.nojekyll` + `assets/`, all media on `media.globalimaige.com` as absolute HTTPS URLs |
+
+A multi-file deck is therefore neither new nor risky — GAP has been one since
+May 2026. What remains genuinely unknown is whether **Deck Editor v14**
+resolves relative asset URLs on import. GAP sidesteps that question entirely by
+using absolute URLs to the media host.
+
+## Published scroll-test variant (2026-08-24)
+
+`https://seanchaudhuri0075-cmd.github.io/henhouse-scrolltest-deck/`
+
+Repo `henhouse-scrolltest-deck`, branch `gh-pages`, **deliberately no `CNAME`**
+so it takes no `globalimaige.com` hostname and cannot collide with the two
+existing HenHouse repos (`henhouse-creative-deck`, `henhousecreative-deck`) —
+neither of which was touched.
+
+21.03 MB `index.html` (all images inlined) + `assets/` with the 5 unique
+videos, 24.49 MB, referenced by **relative** `src`. 45.52 MB total. Over HTTPS
+the relative refs resolve and `preload="none"` genuinely defers each fetch
+until the element nears playback; the origin honours range requests (verified
+`206` on a 1KB range), so videos stream rather than download whole.
+
+Diagnostic artefact, not a deliverable. It exists to make the scroll test
+answerable with real video playing, which neither the 63.14 MB single file
+(all bytes up front) nor the no-video diagnostic could do.
+
+## Old Spice — flagged for re-import once the editor is fixed (2026-08-24)
+
+**Not touched. Recorded so it is not forgotten.**
+
+`oldspicepackaging.globalimaige.com` is live and renders correctly, but
+**3.45 MB of its 3.51 MB published file is `url(data:...)` inside `:root`** —
+15 shared-property crop assets that Deck Editor v14 never externalised (see
+LEARNINGS rule 36). Its 39 `img`/`poster` srcs went to R2 as expected; only the
+CSS-painted ones stayed inline. 98.3% of what a visitor downloads is bytes that
+were supposed to be on the CDN.
+
+**Re-import is worth doing when — and only when — the editor rewrites
+`url(data:...)` inside a `<style>` block.** Re-importing before that changes
+nothing: the same 15 properties would survive the round-trip again.
+
+The alternative, if the editor fix is far off, is the HenHouse workaround:
+rebuild `oldspice_deck_embedded.html` with the crop-half dedupe disabled so all
+15 become real `<img>` elements, then re-import. That grows the input file by
+roughly 4.6 MB (15 assets × the copy the dedupe was saving) and shrinks the
+published deck by ~3.45 MB. `phase_1c/oldspice/embed.py` would need the same
+`DEDUPE_CROP_HALVES = False` switch HenHouse now carries.
+
+Deliberately not done now: Old Spice is signed off and live, and this is a
+delivery-efficiency fix, not a correctness one.
+
+## Olay — scroll feel was never reviewed (2026-08-25)
+
+Olay's mobile has **five documented rounds** in the Deck 6 section above:
+mobile review round (backdrops, occlusion, tile sizing), GIF logo + spacing,
+renders ground fix for slides 4-7, and mobile rounds 2-4 (fill/merge/carousels,
+unstretch/merged-header, slide 3 variant matrix). Round 2 records *"Reviewed on
+a real phone"*. Each round re-verified desktop pixel-identical.
+
+**Scroll feel was in none of them.** Grepping the whole Deck 6 section for
+`scroll-snap`, `snap`, `momentum`, `scroll feel`, `inertia`, `fling` returns
+nothing. Every round was layout, sizing, occlusion and spacing.
+
+That is the same blind spot HenHouse had: mobile signed off on *appearance*,
+with scroll *behaviour* never examined. Both decks shipped
+`scroll-snap-stop:always` unconditioned — a discrete-paging affordance that
+turns every fling into a single-step advance on an inertial surface — and it
+survived five review rounds on Olay and four on HenHouse because nobody was
+looking at that axis. Worth treating scroll behaviour as its own review
+dimension rather than something that rides along with a layout pass.
+
+**Ported to Olay 2026-08-25**, both declarations together, mobile-gated at the
+same 820px breakpoint:
+
+```
+#deck  { scroll-snap-type:none }      /* was: y proximity */
+.slide { scroll-snap-stop:normal }    /* desktop keeps y mandatory + always */
+```
+
+Desktop CSS byte-identical; body markup byte-identical. The strip carousel
+keeps its own `scroll-snap-type:x proximity` — verified at runtime: mobile deck
+`none`, carousel `x`; desktop deck `y mandatory`, carousel off.
+
+The `.slide` selector is left blanket, so `stop:normal` also lands on the
+carousel tiles. Inert there (their snap is on the x axis), and left visible
+rather than pre-empted, by instruction.
+
+**Geometry differs from HenHouse and may matter.** At 390x844 HenHouse had 28
+of 51 snap points exactly one viewport apart (55%), which made proximity behave
+as mandatory. Olay has 11 of 33 (33%), median gap 983px, max 2272 — but **no
+gap is shorter than one viewport** (min exactly 844px). So proximity intercepted
+fewer flings here, and `stop:always` was likely the dominant cause rather than
+snap strictness. The two declarations were applied together at Sean's
+instruction, to be judged on the phone rather than split.
+
+Diagnostic build published for review at
+`https://seanchaudhuri0075-cmd.github.io/olay-scrolltest-deck/` — separate repo,
+no CNAME, no globalimaige.com hostname, no R2, nothing touching the live deck.
+It also carries the `_solid_color`/ColorResolver fix (slides 9/10 wash).
+
+## Deck Editor v14 — the "Deck Name" field persists across sessions (2026-08-25)
+
+**Confirmed from the editor, not inferred.** `Upload to R2` opens a dialog with:
+
+| field | |
+|---|---|
+| Worker URL | *(the deck-media Worker endpoint — read it from the dialog; deliberately not recorded here, this repo is public)* |
+| **Deck Name (folder prefix)** | **sets the R2 prefix** |
+| Auth Token | |
+| | *"Files stored as /deckname/video-1.mp4"* |
+
+**The Deck Name field is pre-filled and does NOT reset per deck.** Loading
+Olay's embedded file showed the field still holding `henhouse` from a previous
+session — note it was `henhouse`, not `olay` and not the loaded file's name, so
+it carries the last *typed* value rather than deriving from the deck.
+
+**That is the whole root cause of the Old Spice / Olay collision.** Olay was
+imported 2026-08-21 with the field at `olay`. All three Old Spice imports the
+next day inherited it, wrote 29 objects into `olay/`, and clobbered 24 of
+Olay's 94 image ordinals — putting Old Spice packaging on Olay's slides 2-6 in
+front of a client. Nothing in the tooling flagged it; the deck still rendered.
+
+**Standing risk: the field must be read and set deliberately on EVERY import.**
+It is a single text input that silently carries the previous deck's value, and
+the failure is invisible at publish time — the deck renders correctly because
+the *other* deck's assets are valid images. It only surfaces when someone
+compares published bytes against the build, which is how this was found, four
+days late.
+
+Mitigations, in order of durability:
+1. **Check the field every time.** Process only; this is what failed.
+2. **Make it content-derived** (deck title or file name) so nothing can carry.
+3. **Namespace per publish** (`<deck>/<build-id>/`) so even a repeated value
+   lands in a fresh directory — this also permanently removes the immutable
+   cache hazard, since every publish produces new URLs.
+
+Until (2) or (3), treat the field as the highest-risk control in the pipeline.
+
+**Cache consequence.** R2 objects are served `Cache-Control: max-age=31536000,
+immutable`. Overwriting a poisoned key corrects the origin but NOT the copies
+already held by browsers and the edge, for up to a year. So a collision cannot
+be repaired in place — it needs a fresh prefix and an HTML re-point.
+
+---
+
+# Deck 9 — Venus / Hestia "Photoshoot GenAI Creative Ads" (2026-08-26)
+
+## R2 prefix: `venus-hestia` — WRITE THIS INTO THE DIALOG
+
+**Deck Name (folder prefix) = `venus-hestia`**
+
+Recorded here *before* the Deck Editor step, deliberately, because the field
+does not reset between sessions and currently reads **`olay-v2`** from the last
+publish. Typing it at the dialog from memory is exactly how Old Spice inherited
+`olay/` and put another client's packaging on Olay's slides 2-6 for four days.
+Read the field, clear it, type `venus-hestia`, then upload.
+
+Prefix must not collide with: `olay`, `olay-v2`, `oldspicepackaging`,
+`hh-creativestrategy`, `pgdigital`.
+
+## Source file — canonical is the _OSR
+
+`Venus_Hestia_Photoshoot_GenAI_CreativeAds_OSR.pptx`
+sha256 `32689c7c0d8e84793f8c91a44fc41bc6689b25566f5f76c3ae505c90f09d1162`
+958,639,589 bytes, modified 2026-08-26 01:37:45, **65 slides**.
+
+`041626_..._R4.pptx` (958,571,645 B, 2026-08-18, 63 slides) is the superseded
+revision and is to be ignored entirely.
+
+`_OSR` is this client's standard delivery suffix, not a one-off export — the
+same folder holds `FACTORY_EXPANDED_OSR.pptx` and
+`GIF2026_3D_CGVFX_AI_Presentation_OSR.pptx`. The OSR mtime is 34 seconds before
+the Finder screenshot that delivered it.
+
+**Do not mix the two files.** OSR is a strict superset: 224 of its 226 media
+contents also exist in R4, none of R4's are absent from OSR, and it adds
+slides 64/65 plus 2 media. But the media are **renumbered by one** —
+`OSR image101.jpeg == R4 image100.jpeg`, and 170 of 226 files carry identical
+bytes under a different name. Since the Deck Editor derives R2 keys from media
+ordinals, building from one file and later switching would move 170 assets to
+different keys under `Cache-Control: max-age=31536000, immutable`. The source
+choice fixes the key space for the life of the deck.
+
+**Open at desktop review:** slides 64 and 65 are the entire content difference
+from R4 and their contents are not yet known. Flag them for Sean.
