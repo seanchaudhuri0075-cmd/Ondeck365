@@ -709,7 +709,28 @@ Ranked by value against cost. **(d) is the one to do first regardless.**
   `Cache-Control: immutable` repair problem, since every publish produces new
   URLs. Cheapest large win; costs only storage.
 
-### Recommendation
+### RESOLVED 2026-08-26 — both fixes landed, and the Worker confirmed
+
+| | |
+|---|---|
+| **Fix 1** | `5d87689` — the Deck Name is no longer persisted. Field starts empty every load; both uploaders refuse an empty name; the config panel opens when either field is blank. Worker URL and token still persist. |
+| **Fix 2** | `e47ed5a` — every upload writes to `<slug>/<build-id>/`, id = `YYYYMMDD-HHMMSS-xxxx` with four crypto-random base36 chars. |
+| **Worker** | **PASS, confirmed against the real Worker 2026-08-26 via `tools/deck_editor/worker_keytest.sh`. Two-segment keys work.** The `<slug>/<build-id>/` layout is verified end to end, not inferred. |
+
+**What this changes for deck 9's publish step.** A wrong slug can no longer
+overwrite anything — it lands in a directory that collides with nothing — and
+because every publish produces new URLs, the
+`Cache-Control: max-age=31536000, immutable` repair problem is retired: there is
+nothing to correct at the edge. Setting the Deck Name correctly still matters
+(a wrong one is a mislabelled directory and a wrong public URL), but it is now
+a **cosmetic** error rather than data loss in another client's deck.
+
+The remaining standing instruction is unchanged and much cheaper to satisfy:
+the field is empty, so type `venus-hestia` and read back the destination line
+the modal now shows — *"Writing to venus-hestia/&lt;build-id&gt;/"* — before
+clicking Upload.
+
+### Recommendation (superseded above, kept for the reasoning)
 
 **(d) plus the `loadR2` deletion.** Together they make a wrong slug harmless
 rather than merely unlikely — one removes the silent carry, the other removes
