@@ -485,3 +485,130 @@ markup, a few hundred KB, and every amplifier in 8c stops mattering.
 generators, padded decks). The padded decks are ~860 MB on disk and were not
 committed. Disk was at 7.4 GB free after generating them; regenerate rather than
 keep them.
+
+---
+
+## 9. TEST 3 — the Publish caveat, now tested instead of read (2026-08-26)
+
+Section 8d flagged, from source only, that the one-click `Publish` flow would
+throw on relative-path media. That was the same shape of unverified claim as the
+`DOMParser` one, so it was tested the same way.
+
+**Harness:** minimal 2-slide multi-file fixture — a 1.2 KB `index.html` with
+three relative-path assets (`media/img_a.png`, `media/img_b.png`,
+`media/clip_1.mp4`) — plus a **local mock Worker** on `127.0.0.1` that records
+what it was asked to store and returns a `https://mock-worker.invalid/…` URL.
+**No real deck, no real bucket, no real prefix, nothing named `venus-hestia`.**
+Deck Name was `zz-local-mock-test`; the Worker URL pointed at localhost, so
+nothing left the machine. Editor served over `http://127.0.0.1`, a different
+origin from `file://`, so the persisted Deck Name field was never read or
+written; the test origin's `localStorage` was cleared afterwards.
+
+### Result
+
+| path | relative-path media | outcome |
+|---|---|---|
+| **`Upload to R2` modal** | 3 of 3 | ✅ **all uploaded from disk, all 3 `src` rewritten to R2 URLs** |
+| **`Publish` (one-click)** | 3 of 3 | ❌ **`TypeError: Cannot read properties of null (reading '1')`** — 0 uploaded, 0 rewritten |
+| `Upload to R2` modal, mixed inline + relative | 1 `data:` + 2 relative | ✅ all 3 uploaded and rewritten, no `data:` left |
+| `Publish`, mixed inline + relative | 1 `data:` + 2 relative | ❌ **1 object written to the bucket, then threw. 0 rewritten.** |
+
+The `Upload to R2` modal shows **"📁 Local media files detected — Select Media
+Folder"**, rows go `needs file` → `✓ done`, and srcs land as
+`https://…/zz-local-mock-test/<file>`. The multi-file path is confirmed working
+end to end.
+
+*(One honesty note on method: `showDirectoryPicker()` is a native dialog and
+cannot be driven from here. The test built the exact `{path → File}` map that
+`pickR2Folder()` produces and assigned it to `r2LocalFileMap`, then ran the real
+`doR2Upload()`. The picker **dialog** is unexercised; everything downstream of it
+is real. Note also that `openR2Modal()` **resets `r2LocalFileMap` and re-reads
+config from localStorage** — link the folder *after* opening the modal, which is
+the order the UI enforces anyway.)*
+
+### The part that is worse than section 8d said
+
+**`doPublish` does not abort on the R2 failure — it swallows it and keeps
+publishing.** Verbatim, at `doPublish` step 1:
+
+```js
+try{ await doR2Silent(); setStep('r2','☁','Media uploaded to R2','✓ done','ok') }
+catch(e){ setStep('r2','☁','R2: '+e.message.substring(0,40),'⚠ skip','err') }
+```
+
+No rethrow. Control falls straight through to step 2 (`buildOutput`), step 3
+(create repo), step 4 (push `index.html` to `gh-pages`). Verified: after the
+throw the step renders **`⚠ skip`**, and the HTML that would be pushed still
+carries `src="media/img_a.png"` and friends. Since only `index.html` is pushed
+to `gh-pages`, **every image and video on the published deck 404s** — a live,
+customer-visible deck of broken media, announced by one amber `⚠ skip` line in a
+six-step list that otherwise reads all-green.
+
+The mixed case adds the second hazard: `doR2Silent` uploads items in order and
+throws at the first relative one, so **`data:` assets ahead of it are already
+written to the bucket while `rawHTML` is never rewritten.** That is a partially
+populated prefix under `Cache-Control: max-age=31536000, immutable` — the exact
+condition NOTES says cannot be repaired in place.
+
+### Rules for deck 9
+
+1. **Use `Upload to R2`. Never use `Publish`.** For a multi-file deck the
+   one-click flow is not slower or riskier, it is simply broken, and it fails
+   loudly enough to notice only if you are reading the step list.
+2. **After uploading, confirm zero relative `src` remain** before exporting.
+   `collectMedia()` returning any `needsFile` item post-upload means the rewrite
+   did not happen.
+3. **A `⚠ skip` on the R2 step is a stop, not a warning.** If `Publish` is ever
+   run by accident, treat the prefix as contaminated: check what landed, and
+   move to a fresh prefix rather than overwriting.
+4. Worth fixing in the editor eventually — `doR2Silent` needs the `needsFile`
+   branch `doR2Upload` already has, and that catch should rethrow. Same class as
+   rule 36: the real fix is in the editor, the workaround is per-deck.
+
+---
+
+## 10. Deck 9 is multi-file — AirDrop CANNOT review it
+
+**Every mobile review of deck 9 goes through a staging repo over HTTPS. Not
+AirDrop, not Files, not Quick Look.**
+
+Deck 9's media lives in `assets/` (before upload) or on
+`media.globalimaige.com` (after). Opened from Files on a phone, the document is
+a `file://` URL and **iOS Quick Look's sandbox will not fetch sibling assets** —
+relative `assets/…` refs resolve to nothing and absolute HTTPS refs are subject
+to whatever the sandbox allows. Nothing loads.
+
+**The trap is that the deck still looks fine.** A `<video>` that never loads
+still lays out — the box is reserved from `--ar`, the poster slot is empty, and
+the page scrolls beautifully because there is nothing to decode. A reviewer
+swipes through 65 slides, sees layout and type, and signs off on scroll feel
+that was measured against zero media. **This nearly produced a wrong conclusion
+once already**: the HenHouse scroll diagnosis (NOTES 2026-08-24) is explicit
+that pointing the diagnostic at external media would have turned the comparison
+into "63 MB-with-video vs 21 MB-with-no-video-loading" and proved nothing. That
+is exactly why
+`henhouse_DIAGNOSTIC_no-video-bytes_DO-NOT-SHIP.html` was built with the `src`
+**stripped** rather than pointed at a folder, and why the separate
+`henhouse-scrolltest-deck` repo was published to answer the question honestly.
+
+This retires the old operating principle for this deck. NOTES records *"AirDrop
+verification: only fully-inlined HTML can be trusted on iPhone"* and *"inline =
+iPhone-AirDrop-verifiable, external = not"*. Deck 9 cannot be fully inlined
+(section 8), so **the inlined-AirDrop review path does not exist here at all.**
+
+**The procedure:**
+
+- Publish each review round to its own staging repo on `gh-pages`, pattern
+  `venus-hestia-scrolltest-deck`, **deliberately no `CNAME`** — no
+  `globalimaige.com` hostname, no collision with the live deck. Precedent:
+  `henhouse-scrolltest-deck`, `olay-scrolltest-deck`.
+- Media over HTTPS with **range requests** (verified `206` on HenHouse), so
+  `preload="none"` genuinely defers each fetch and videos stream instead of
+  downloading whole. This is the only setup in which the IntersectionObserver
+  behaviour from section 7 can be judged.
+- **Review scroll behaviour as its own dimension**, with video actually playing.
+  NOTES 2026-08-25: scroll feel survived five review rounds on Olay and four on
+  HenHouse because every round looked at appearance. Layout sign-off is not
+  scroll sign-off.
+- Never review deck 9 from a local file. If a build cannot be reached over
+  HTTPS, it cannot be reviewed.
