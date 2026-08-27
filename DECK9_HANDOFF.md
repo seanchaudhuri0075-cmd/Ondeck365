@@ -780,6 +780,18 @@ Some of it may survive rework, some clearly will not. None of it is settled.
   per screen in a horizontal swipe. **The premise is what needs re-examining
   first**, since scroll feel was the headline complaint and a horizontal
   scroller nested inside a vertical one is a plausible cause.
+  **NARROWED 2026-08-27 — the nesting alone is NOT sufficient.** pgdigital now
+  ships 13 slides carrying a horizontal snap scroller (`.artscroll`,
+  `scroll-snap-type:x proximity`) nested inside the vertical deck scroller,
+  with the vertical snap gate released on touch, and its scroll feel was
+  verified on a real phone and signed off — including a deliberate check that a
+  diagonal swipe on those carousel slides does not carry vertically. Chrome's
+  gesture direction locking contains it. So nesting a horizontal scroller
+  inside a vertical one does not by itself produce the complaint, and this
+  bullet should no longer be treated as the presumed cause. Look instead at
+  what deck 9 did differently: one format per screen (density), whether a touch
+  snap gate was present at all, and the tile geometry. See `NOTES.md`
+  §"pgdigital — mobile scroll gate ported from hh".
 - **The detector still looks sound and is worth keeping** regardless of what
   replaces the carousel: it separates the 44 sheets from the other 20 by
   MEASUREMENT (media box aspects within 6% of a delivery ratio, pairwise

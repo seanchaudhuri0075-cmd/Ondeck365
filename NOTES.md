@@ -2709,22 +2709,28 @@ applying the gate:
 `scroll-snap-type` does not inherit, and each `.artscroll` is its own x-axis
 scroll container, so releasing the parent's y-axis snap cannot reach it.
 
-## UNVERIFIED — the diagonal-swipe caveat. Do NOT read this as tested.
+## Diagonal swipe on the carousel slides — CHECKED AND CLEAR (2026-08-27)
 
-**Reasoned, not measured. Touch gestures are not testable in this environment.**
+**Verified by Sean on a real phone, on the carousel slides themselves.**
+Momentum now carries through multiple slides, matching hh, and **the diagonal
+swipe stays put — there is no vertical runaway.** Chrome's gesture direction
+locking does contain it. This is a measured outcome, not a prediction.
 
-Today's `scroll-snap-stop:always` acted as a brake: a vertical fling could not
-run past one slide, which incidentally masked the vertical component of a
-diagonal gesture on a carousel slide. With the gate released, **a diagonal swipe
-starting on one of those 13 slides may now carry vertically through several.**
+**Why it was worth checking, kept because the reasoning still holds.** The old
+`scroll-snap-stop:always` acted as a brake: a vertical fling could not run past
+one slide, which incidentally masked the vertical component of a diagonal
+gesture on a carousel slide. Releasing the gate removed that brake, so a
+diagonal swipe starting on one of those 13 slides *could* have carried
+vertically through several. `overscroll-behavior-x:contain` handles horizontal
+end-of-travel but does not constrain vertical, and **hh has no nested scrollers,
+so hh's sign-off could not be cited for this case.** The containment had to come
+from somewhere else, and it did — from the browser, not from our CSS.
 
-Chrome usually locks gesture direction on touch, which should contain it, and
-`overscroll-behavior-x:contain` handles horizontal end-of-travel — but it does
-not constrain vertical. **hh has no nested scrollers, so hh's sign-off does not
-cover this case and cannot be cited for it.**
-
-**This is the same shape the Venus/deck 9 mobile build was rejected over** — a
-horizontal scroller nested inside a vertical one, flagged in
-`DECK9_HANDOFF.md` §12 as "a plausible cause" of a scroll-feel complaint.
-Those 13 slides need a deliberate look on a phone. Until someone does that and
-records it here, this is an open risk, not a verified outcome.
+**Consequence for deck 9 — this narrows the rework.** `DECK9_HANDOFF.md` §12
+records "a horizontal scroller nested inside a vertical one" as a plausible
+cause of the Venus scroll-feel complaint. pgdigital is now a live
+counter-example: 13 slides with exactly that nesting, on a released vertical
+gate, and the scroll feel is signed off. **The nesting alone is not sufficient
+to cause the complaint.** Deck 9's rework should look for what else differed —
+the per-screen carousel density, the gate, or the tile geometry — rather than
+treating the nested scroller as the presumed cause.

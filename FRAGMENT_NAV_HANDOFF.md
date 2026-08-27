@@ -3,9 +3,10 @@
 **Date:** 2026-08-27
 **Status:** §1 FIXED (`4e10fd9`). §3 partly ADDRESSED via 1-based aliases
 (`8cedd3b`) — the builder-side ordinal problem is still open. §8 mobile scroll
-gate SHIPPED (`8c971d9`, revert target `8cedd3b`) and confirmed on a phone.
-§4 chapter anchors still open and now unblocked. Mobile below 900px remains
-UNVERIFIED for §7's changes, and §8 carries one explicitly untested risk.
+gate SHIPPED (`8c971d9`, revert target `8cedd3b`) and fully verified on a real
+phone, diagonal-swipe check included.
+§4 chapter anchors still open and now unblocked. Mobile below 900px remains UNVERIFIED for
+§7's changes only — the aliases, the URL tracking and the hero footer.
 
 Scope: everything a shareable per-slide or per-chapter link depends on —
 (1) does fragment navigation scroll at all, (2) do ids survive a Deck Editor
@@ -280,12 +281,21 @@ hh: a flick can now rest mid-slide.
 off: at 1680px, snap-type `y`, stop `always`, and 10 wheel ticks travel exactly
 895px snapped — matching pre-patch, current, and hh.
 
-### UNVERIFIED — do not read as tested
+### Diagonal swipe — CHECKED AND CLEAR (2026-08-27)
 
-The 13 `.artscroll` carousels keep their own x-axis snap (measured before/after,
-all four properties unchanged). But the vertical brake that masked the vertical
-component of a **diagonal** swipe on those slides is now gone, and whether that
-carries is **untested — touch gestures are not testable in this environment**.
-hh has no nested scrollers so its sign-off does not cover it. **Same shape as
-the rejected Venus mobile build** (`DECK9_HANDOFF.md` §12). Open risk until
-someone checks those 13 slides on a phone and records it.
+**Verified on a real phone, on the carousel slides.** Momentum carries through
+multiple slides, matching hh, and the diagonal swipe **stays put** — Chrome's
+gesture direction locking contains it. Measured, not predicted.
+
+The 13 `.artscroll` carousels keep their own x-axis snap (measured
+before/after, all four properties unchanged). The risk was that removing the
+vertical brake — which had masked the vertical component of a diagonal swipe —
+would let it carry; `overscroll-behavior-x:contain` covers horizontal
+end-of-travel only, and hh has no nested scrollers so its sign-off could not be
+cited. That reasoning was sound; the containment simply comes from the browser.
+
+**This narrows deck 9.** `DECK9_HANDOFF.md` §12 lists a horizontal scroller
+nested inside a vertical one as a plausible cause of the Venus scroll
+complaint. pgdigital now runs 13 such slides with a released vertical gate and
+is signed off, so **the nesting alone is not sufficient** — look elsewhere
+first.
