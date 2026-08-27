@@ -4,7 +4,7 @@
 **Status:** §1 FIXED (`4e10fd9`). §3 partly ADDRESSED via 1-based aliases
 (`8cedd3b`) — the builder-side ordinal problem is still open. §8 mobile scroll
 gate SHIPPED (`8c971d9`) and fully verified on a real phone, diagonal-swipe
-check included. §9 chapter anchors SHIPPED (`4fa70bf`, revert target
+check included. §9 chapter anchors SHIPPED (`4fa70bf`, hold added `6e5d704`, revert target
 `8c971d9`), closing §4 for pgdigital — the per-deck archetype mapping for the
 other decks is still open. Mobile below 900px remains UNVERIFIED for
 §7's changes only — the aliases, the URL tracking and the hero footer.
@@ -337,10 +337,17 @@ fragment, invalid CSS selector. Verified. `getElementById` throughout — do not
 re-confirmed on the live domain. No divider is tall; all five tall slides
 re-checked and fine. All 50 legacy ids, all 50 aliases, all 50 counters intact.
 
-### Known interaction
+### Chapter hashes HOLD until the viewer leaves the slide (`6e5d704`)
 
-The §7 scroll observer rewrites a chapter hash to the 1-based alias once the
-slide is in view — `#05-sponsored` becomes `#slide40`. Destination correct; the
-slug does not persist for re-copying. Deliberate call, not a bug: suppressing it
-would fight the observer's purpose. Documented in NOTES.md with the option if it
-is ever unwanted.
+Superseded `4fa70bf`'s behaviour, where the §7 observer rewrote a chapter hash
+to `#slideN` within a second and the slug could not be copied on arrival.
+
+The observer skips its rewrite while the chapter's own slide holds the midline,
+and releases the moment another slide takes it. **No new listeners, no timers**
+— the release rides the observer already running. Held per arrival, so a
+mid-session chapter link holds again.
+
+Verified with a forced paint at each step (the observer cannot fire in a
+non-painting tab): `#03-cgi` held, then released to `#slide28` after one slide;
+`#slide-45` unaffected, normalising to `#slide46`; `#04-display` held
+mid-session. 106 ids, zero duplicates, all prior anchors intact.

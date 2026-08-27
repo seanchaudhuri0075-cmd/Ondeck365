@@ -2803,15 +2803,40 @@ re-checked anyway and still carry a correct alias and counter.
 Regression audit: **all 50 legacy `slide-N` ids resolve, all 50 one-based
 aliases pinned at `offsetTop 0`, all 50 counters correct.**
 
-## Known interaction — a chapter hash does not persist in the address bar
+## A chapter hash now HOLDS until the viewer leaves that slide (`6e5d704`)
 
-Not a defect, but it should not surprise anyone later. The scroll observer
-(`8cedd3b`) rewrites the hash to the 1-based alias once a slide is in view, so
-**`#05-sponsored` becomes `#slide40`** within a second of landing. The
-destination is correct; what changes is the link a viewer would copy *after*
-arriving — they get the slide number, not the chapter slug.
+**Superseded the behaviour first shipped in `4fa70bf`.** The scroll observer
+(`8cedd3b`) rewrote a chapter hash to the 1-based alias within a second of
+arrival — `#05-sponsored` became `#slide40` — so the slug could not be copied by
+whoever it was shared with. Sean asked for it to stick; it now does.
 
-Options if that is ever unwanted: suppress the observer's first rewrite while
-the loaded hash is a chapter slug and the viewer has not scrolled yet. Not done,
-because the observer's whole purpose is that the URL reflects position. Decide
-deliberately rather than treating it as a bug.
+**How, and why it costs nothing.** The hold is scoped to the chapter's own
+slide: the observer skips its rewrite while that slide holds the midline, and
+releases the moment another slide takes it, after which position tracking
+resumes for the rest of the session. **No new listeners and no timers** — the
+release rides the observer that was already running, so there is nothing to
+unwind if the viewer never scrolls, and nothing to leak if they never arrive at
+a chapter at all.
+
+Held **per arrival**, not once per load: following a chapter link mid-session
+holds again.
+
+`chapterSlide()` resolves the current fragment to a chapter slide by exact slug
+or unique prefix, reusing the resolver's single-hit rule; the `chapters` list
+moved above the observer so both share it. `getElementById` throughout — see the
+digit-leading-id trap above.
+
+### Verified in-browser, forcing a paint at each step
+
+A paint is required at every step: **the observer cannot fire in a tab that is
+not rendering**, which is the trap recorded earlier in this file.
+
+| step | result |
+|---|---|
+| load `#03-cgi` | hash **HELD** through the paint that previously rewrote it |
+| then scroll one slide | **released** → `#slide28`, tracking resumed |
+| load `#slide-45` | unaffected → normalises to `#slide46` immediately |
+| `#04-display` mid-session | hash **HELD**, landed 38 / 50 |
+
+106 ids, zero duplicates; all 50 legacy ids, 50 aliases, 50 counters and 5
+chapter anchors still correct; no console errors originating from the deck.
