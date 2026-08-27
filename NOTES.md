@@ -2195,3 +2195,170 @@ choice fixes the key space for the life of the deck.
 
 **Open at desktop review:** slides 64 and 65 are the entire content difference
 from R4 and their contents are not yet known. Flag them for Sean.
+
+---
+
+# Fragment navigation, slide identity, chapter anchors (2026-08-27)
+
+Recorded from a session whose transcript was lost. **Everything below was
+investigated and measured in a live browser against live files — none of it is
+reasoned or inferred.** The one item that is a proposal rather than a
+measurement is labelled as such.
+
+## Fragment navigation — root cause found: `scroll-behavior: smooth`
+
+**`pgdigital` sets `scroll-behavior: smooth` on `#deck`. The other three decks
+use `auto`.** Fragment navigation and `scrollIntoView()` both inherit it, and a
+smooth scroll over ~48,000px inside a snap container gets **cancelled**.
+
+**Being an inner scroller is NOT the problem.** That was the standing
+hypothesis and it is wrong — three decks are inner scrollers and their fragment
+navigation works fine. The single differing property is the cause.
+
+### Measured
+
+| case | result |
+|---|---|
+| hh desktop, snap active, `#s40` | lands exactly, `targetTop` 0, 100% of viewport |
+| hh mobile 390x844, gate released (`snap:none`, `stop:normal`) | lands exactly, `targetTop` 0 |
+| cold load, both of the above | **zero drift**, with 93 images still `incomplete` |
+| pgdigital desktop, `#slide-45` | **does not move** — `deckScrollTop` 0, still on slide-0, target 43,290px below |
+
+Cold load is clean because every media box is reserved from `--ar`:
+`imgs_without_reserved_box: 0`. Late-loading images cannot shift the landing
+position, so image decode is excluded as a contributing cause.
+
+### Mechanism isolated
+
+On pgdigital desktop, same target, same element:
+
+| call | result |
+|---|---|
+| `deck.scrollTo({top, behavior:'smooth'})` | **FAILS** — stays 0 |
+| `deck.scrollTo({top, behavior:'instant'})` | works — 43290 |
+| `deck.scrollTop = top` | works — 43290 |
+
+The distance is the variable, not the target and not the container: the same
+scroller reaches the same offset by two of three routes.
+
+### Corroboration from this repo
+
+`scroll-behavior` appears **nowhere** in this repository — not in `deckkit`,
+not in any generator, and not in any built deck under `out/` (grep across all
+files, excluding `.git` and `out.zip`, 0 hits). Our builder never emits the
+property, so every deck it produces defaults to `auto`. pgdigital's `smooth`
+came from outside this pipeline, which is consistent with it being the only
+deck of the four that has the defect.
+
+**Fix direction:** do not set `scroll-behavior: smooth` on a long snap
+scroller. Where smooth motion is wanted, drive it per-call with an explicit
+`behavior` rather than inheriting it from the container, so long jumps can fall
+back to `instant`.
+
+**This blocks chapter anchors.** pgdigital is the only deck with chapters
+(below), and it is the one deck where fragment navigation does not work. Fix
+the `scroll-behavior` first — anchor work on pgdigital cannot be verified until
+fragment navigation lands.
+
+## Editor round-trip — ids survive
+
+Import → `commitAll()` → `buildOutput()`, run on live files:
+
+| deck | ids | attribute counts | scripts |
+|---|---|---|---|
+| hh | 52 ids identical | `data-slide` 52 → 52 | — |
+| pgdigital | 50 ids identical | `data-n` 55 → 55, rail 51 → 51 | both preserved |
+
+Consistent with the earlier finding of **five benign normalisations and no
+sanitiser** (`DECK9_HANDOFF.md` §7). Nothing in the editor rewrites, strips, or
+renumbers ids on a round-trip.
+
+## Ordinal stability — the editor is safe, the builder is what breaks links
+
+Both editor mutations were measured on live files:
+
+| mutation | result |
+|---|---|
+| delete slide 3 | ids become `s1`, `s2`, **`s4`**, `s5` — the editor **leaves a gap, it does not renumber** |
+| reorder via `moveSlide(0,4)` | ids become `s2`, `s4`, `s5`, `s6`, **`s1`** — **ids travel with their content** |
+
+**The editor is content-bound and is not the hazard. Our builder is.** Ordinals
+are assigned by output position, so any change to the source slide set
+renumbers everything downstream of it. Deck 9 is the worked example: dropping
+source slide 1 at build level (commit `3cf5ae1`) renumbered the remaining
+slides 1..64, so **the old `s2` became `s1`** — every previously shared link
+silently moved by one slide.
+
+This is the same failure class as the R4 → OSR media renumbering (deck 9,
+§"Source file") and the R2 prefix collision (§"Deck Editor v14"): one
+identifier silently meaning two different things.
+
+### Proposal — NOT yet implemented
+
+Emit **`id="s{src_n}"` and `data-slide="{n}"`**: the id bound to the **source
+PPTX slide number**, the data attribute to **output position**.
+
+- Human-readable and guessable, unlike an opaque id.
+- Stable under the mutation that actually breaks links — dropping or inserting
+  a source slide no longer moves any other slide's id.
+- Output position stays available for anything that needs it, on the data
+  attribute where renumbering is harmless.
+
+**No content hash. Sean rejected an opaque id.**
+
+## Chapter anchors
+
+### pgdigital needs no authoring hint
+
+`class="slide k-divider"` already marks **exactly 5 slides**, matching the five
+chapters, with the full title in `data-slide-name`:
+
+| slide | title | slug |
+|---|---|---|
+| `slide-4` | 01 / Omnichannel Meta Ads | `01-omnichannel-meta-ads` |
+| `slide-9` | 02 / 3D CGI and GenAI Social Ads | `02-3d-cgi-genai-social-ads` |
+| `slide-26` | 03 / CGI AI Scenes + Environments | `03-cgi-ai-scenes-environments` |
+| `slide-37` | 04 / Display Banner Ads | `04-display-banner-ads` |
+| `slide-39` | 05 / Sponsored Brand Videos | `05-sponsored-brand-videos` |
+
+**No collisions at any length** — the numeric prefix makes collision
+impossible. **Emit the full slug and resolve any unique prefix**, so both
+`#01-omnichannel` and the full form work.
+
+Also measured: on pgdigital the chapter name appears as a **running kicker on
+every content slide**, so chapter membership is recoverable for **every** slide,
+not just the five dividers.
+
+### The other decks are not uniform — this needs a per-deck mapping
+
+| deck | divider signal | chapters? |
+|---|---|---|
+| pgdigital | `class="slide k-divider"` ×5 | yes |
+| oldspicepackaging | `data-arch=divider` ×3 | yes |
+| hh-creativestrategy | none; closest is `data-arche=route` ×3 | — |
+| olay | nothing (only `data-layout=strip`) | **no chapter structure to anchor** |
+
+So the answer is a **per-deck mapping, not a per-slide hint**. Each `phase_1c`
+builder already classifies archetypes; it only needs to declare **which
+archetype means chapter divider**. Do not add per-slide authoring markup.
+
+## Fragments, not paths — confirmed
+
+Measured against the live host:
+
+| URL | result |
+|---|---|
+| `/01-omnichannel` | **real 404**, GitHub's own error page |
+| `/#01-omnichannel` | **200** |
+
+**There is no SPA fallback.** Anchors must be fragments. A path-shaped share
+link cannot be made to work on this host without adding a fallback that does
+not currently exist.
+
+## Constraint — pgdigital's existing ids must not be renamed
+
+pgdigital's ids are **`slide-N` and 0-based** (`slide-0` is the first slide;
+the measured target above was `#slide-45`). **Do not rename them.** Links may
+already have been shared against them, and this host 404s rather than falling
+back, so a renamed id fails outright rather than degrading. Any new scheme is
+additive on pgdigital — keep `slide-N` resolving.
