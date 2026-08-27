@@ -2734,3 +2734,84 @@ gate, and the scroll feel is signed off. **The nesting alone is not sufficient
 to cause the complaint.** Deck 9's rework should look for what else differed —
 the per-screen carousel density, the gate, or the tile geometry — rather than
 treating the nested scroller as the presumed cause.
+
+---
+
+# pgdigital — chapter anchors on the five dividers (2026-08-27)
+
+**Commit `4fa70bf`** on `pgdigital-deck@gh-pages`. **Revert target: `8c971d9`.**
+Live bytes md5-identical to the commit (`7d28b1cb…`), CNAME untouched,
+`~/Downloads` copies confirmed still at their original md5s.
+
+| slide | chapter id | counter |
+|---|---|---|
+| `slide-4` | `01-omnichannel-meta-ads` | 05 / 50 |
+| `slide-9` | `02-3d-cgi-genai-social-ads` | 10 / 50 |
+| `slide-26` | `03-cgi-ai-scenes-environments` | 27 / 50 |
+| `slide-37` | `04-display-banner-ads` | 38 / 50 |
+| `slide-39` | `05-sponsored-brand-videos` | 40 / 50 |
+
+## The full slug needs no script. The prefix does — 8 lines.
+
+Exact-id anchors are resolved by the browser, so the five slugs are just empty
+pinned spans reusing the existing `.alias` rule. **Unique-prefix resolution
+cannot be done in markup**: a fragment that is not an exact id does not resolve
+natively, and there is no CSS or HTML mechanism for partial matching. The
+resolver acts only when the fragment matched nothing:
+
+```js
+const chapters = [...deck.querySelectorAll(".chapter")].map(a => a.id);
+const resolveChapter = () => {
+  const want = decodeURIComponent(location.hash.slice(1));
+  if (!want || document.getElementById(want)) return;
+  const hit = chapters.filter(c => c.startsWith(want));
+  if (hit.length === 1) document.getElementById(hit[0]).scrollIntoView();
+};
+addEventListener("hashchange", resolveChapter);
+resolveChapter();
+```
+
+The **single-hit** check matters: it makes a future slug collision fail closed
+rather than jump somewhere arbitrary. The numeric prefix makes ambiguity
+impossible across these five today, but that is a property of the current slugs,
+not a guarantee.
+
+## TRAP — chapter ids begin with a digit, so `querySelector` throws
+
+`document.querySelector("#01-omnichannel-meta-ads")` **throws** — an id starting
+with a digit is not a valid CSS selector, even though it is a perfectly valid
+HTML id and a perfectly valid URL fragment. **Verified in-browser that it
+throws.** `getElementById` works and is used throughout. Anyone touching this
+code must not "tidy" it into `querySelector`. The same applies to `:target` and
+to any future CSS hook on these ids — none is possible without escaping.
+
+## Three ids per divider — verified no collision
+
+The five dividers now carry `slide-N`, `slideN+1` and the chapter slug. Measured
+in the browser: **106 ids in the document, zero duplicates**; all three resolve
+independently on each divider, with alias and chapter both at `offsetTop 0`
+inside their own slide.
+
+All 11 chapter forms land on the right divider, exact — full slugs plus
+`#01-omnichannel`, `#01`, `#02-3d`, `#03-cgi`, `#04-display`, `#05-sponsored`.
+Confirmed on the live domain too: `#03-cgi` → `slide-26`, counter 27 / 50.
+
+**No divider is a tall slide** (tall are `slide-2, -3, -7, -22, -32`), so the
+tall-slide interaction does not arise here. All five tall slides were
+re-checked anyway and still carry a correct alias and counter.
+
+Regression audit: **all 50 legacy `slide-N` ids resolve, all 50 one-based
+aliases pinned at `offsetTop 0`, all 50 counters correct.**
+
+## Known interaction — a chapter hash does not persist in the address bar
+
+Not a defect, but it should not surprise anyone later. The scroll observer
+(`8cedd3b`) rewrites the hash to the 1-based alias once a slide is in view, so
+**`#05-sponsored` becomes `#slide40`** within a second of landing. The
+destination is correct; what changes is the link a viewer would copy *after*
+arriving — they get the slide number, not the chapter slug.
+
+Options if that is ever unwanted: suppress the observer's first rewrite while
+the loaded hash is a chapter slug and the viewer has not scrolled yet. Not done,
+because the observer's whole purpose is that the URL reflects position. Decide
+deliberately rather than treating it as a bug.

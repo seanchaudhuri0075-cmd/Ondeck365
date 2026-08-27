@@ -3,9 +3,10 @@
 **Date:** 2026-08-27
 **Status:** §1 FIXED (`4e10fd9`). §3 partly ADDRESSED via 1-based aliases
 (`8cedd3b`) — the builder-side ordinal problem is still open. §8 mobile scroll
-gate SHIPPED (`8c971d9`, revert target `8cedd3b`) and fully verified on a real
-phone, diagonal-swipe check included.
-§4 chapter anchors still open and now unblocked. Mobile below 900px remains UNVERIFIED for
+gate SHIPPED (`8c971d9`) and fully verified on a real phone, diagonal-swipe
+check included. §9 chapter anchors SHIPPED (`4fa70bf`, revert target
+`8c971d9`), closing §4 for pgdigital — the per-deck archetype mapping for the
+other decks is still open. Mobile below 900px remains UNVERIFIED for
 §7's changes only — the aliases, the URL tracking and the hero footer.
 
 Scope: everything a shareable per-slide or per-chapter link depends on —
@@ -128,6 +129,9 @@ data-slide="{n}" →  bound to OUTPUT position
 **No content hash — Sean rejected an opaque id.** Do not reintroduce one.
 
 ## 4. Chapter anchors
+
+**SHIPPED for pgdigital 2026-08-27 — see §9 (`4fa70bf`).** The per-deck
+archetype mapping for oldspice / hh / olay below is still open.
 
 ### pgdigital needs no authoring hint — the markup is already there
 
@@ -299,3 +303,44 @@ nested inside a vertical one as a plausible cause of the Venus scroll
 complaint. pgdigital now runs 13 such slides with a released vertical gate and
 is signed off, so **the nesting alone is not sufficient** — look elsewhere
 first.
+
+
+---
+
+## 9. Chapter anchors — SHIPPED 2026-08-27
+
+**Commit `4fa70bf`, revert target `8c971d9`.** Full record: `NOTES.md`
+§"pgdigital — chapter anchors on the five dividers".
+
+Five empty pinned spans on the five `k-divider` slides, reusing `.alias`:
+`slide-4/9/26/37/39` → `01-omnichannel-meta-ads`, `02-3d-cgi-genai-social-ads`,
+`03-cgi-ai-scenes-environments`, `04-display-banner-ads`,
+`05-sponsored-brand-videos`.
+
+### The full slug is script-free; the prefix is not — 8 lines
+
+A fragment that is not an exact id does not resolve natively, and no markup or
+CSS mechanism does partial matching. The resolver runs only when nothing
+matched, and requires a **single** hit so a future slug collision fails closed.
+
+### TRAP — these ids start with a digit
+
+`querySelector("#01-omnichannel-meta-ads")` **throws**: valid HTML id, valid URL
+fragment, invalid CSS selector. Verified. `getElementById` throughout — do not
+"tidy" it. Rules out `:target` and any CSS hook on these ids without escaping.
+
+### Verified
+
+106 ids, **zero duplicates**. Each divider carries three ids (`slide-N`,
+`slideN+1`, slug) resolving independently, alias and chapter both at
+`offsetTop 0`. All 11 chapter forms exact, prefixes down to `#01`; `#03-cgi`
+re-confirmed on the live domain. No divider is tall; all five tall slides
+re-checked and fine. All 50 legacy ids, all 50 aliases, all 50 counters intact.
+
+### Known interaction
+
+The §7 scroll observer rewrites a chapter hash to the 1-based alias once the
+slide is in view — `#05-sponsored` becomes `#slide40`. Destination correct; the
+slug does not persist for re-copying. Deliberate call, not a bug: suppressing it
+would fight the observer's purpose. Documented in NOTES.md with the option if it
+is ever unwanted.
