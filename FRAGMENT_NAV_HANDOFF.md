@@ -1,7 +1,8 @@
 # Fragment navigation, slide identity & chapter anchors — Session Handoff
 
 **Date:** 2026-08-27
-**Status:** investigation complete. **Nothing implemented — deliberately.**
+**Status:** §1 FIXED and pushed (`pgdigital-deck@gh-pages` `4e10fd9`, revert
+target `fb60694`). §3–§6 still open — id scheme and chapter anchors untouched.
 
 Scope: everything a shareable per-slide or per-chapter link depends on —
 (1) does fragment navigation scroll at all, (2) do ids survive a Deck Editor
@@ -18,10 +19,10 @@ identity, chapter anchors (2026-08-27)".
 
 ## 0. Do these in order
 
-1. **Fix `scroll-behavior: smooth` on pgdigital's `#deck`** (§1). Chapter
-   anchors live on pgdigital and only pgdigital, and it is the one deck where
-   fragment navigation does not work. **Anchor work cannot be verified until
-   this lands.**
+1. ~~**Fix `scroll-behavior: smooth` on pgdigital's `#deck`** (§1).~~ **DONE
+   2026-08-27** — `4e10fd9`. Fragment nav now lands exactly; the blocker on
+   chapter-anchor work is cleared. Note the selector was `.deck`, not `#deck`.
+   See `NOTES.md` §"pgdigital — `scroll-behavior` fixed".
 2. Decide the id scheme (§3) — the `s{src_n}` proposal, or an alternative.
 3. Declare the divider archetype per builder (§4).
 

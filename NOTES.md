@@ -2362,3 +2362,137 @@ the measured target above was `#slide-45`). **Do not rename them.** Links may
 already have been shared against them, and this host 404s rather than falling
 back, so a renamed id fails outright rather than degrading. Any new scheme is
 additive on pgdigital — keep `slide-N` resolving.
+
+---
+
+# pgdigital — `scroll-behavior` fixed, and where the file actually lives (2026-08-27)
+
+## FIXED — `scroll-behavior:smooth` removed from `.deck`
+
+**Live repo:** `seanchaudhuri0075-cmd/pgdigital-deck`, branch `gh-pages`.
+**Commit:** `4e10fd9`. **Revert target: `fb60694`** (`Deploy deck: pgdigital`).
+
+One declaration deleted, 26 bytes, CSS only:
+
+```diff
+ .deck{
+   height:100svh;
+   overflow-y:auto;
+   overflow-x:hidden;
+   scroll-snap-type:y proximity;
+-  scroll-behavior:smooth;
+   -webkit-overflow-scrolling:touch;
+ }
+```
+
+### Verified before and after, on the real file, locally served
+
+| | `scroll-behavior` | `#slide-45` → `deck.scrollTop` |
+|---|---|---|
+| before (control) | `smooth` | **0** — still on slide-0, target 43,290px below |
+| after | `auto` | **43290** — exact, `viewportTop` 0 |
+
+The control was the unpatched byte-identical file served from the same server
+to the same browser in the same session, so the one deleted line is the
+established cause, not a coincidence of environment.
+
+Fragment navigation is also exact on **hashchange**, not just cold load:
+`#slide-0` → 0, `#slide-4` → 3848, `#slide-26` → 25012, `#slide-45` → 43290,
+`#slide-49` → 47138. That includes the full-length 47,138px jump, which is
+longer than the one that was failing.
+
+### Three corrections to the 2026-08-27 findings above
+
+1. **The selector is `.deck` (class), not `#deck` (id).** The `#deck` in the
+   earlier entry is wrong. `#deck` is what *our* `phase_1c` builders emit;
+   pgdigital predates them and uses a class.
+2. **A `prefers-reduced-motion` override was already present** and was left in
+   place: `@media (prefers-reduced-motion:reduce){ .deck{scroll-behavior:auto} }`.
+   It is now a no-op, kept deliberately — it documents intent and still guards
+   if `smooth` is ever re-added. **It also means fragment navigation was never
+   broken for reduced-motion users**, which is why the bug was not universal.
+3. **The rail is not user-facing.** `<nav class="rail" hidden aria-hidden="true">`
+   — it is deck-editor metadata, backed by `.rail[hidden]{display:none!important}`.
+   There is no rail click to regress, so the "short rail jump" check has no
+   subject.
+
+### The one user-visible change: keyboard paging
+
+The deck intercepts `keydown` and calls `deck.scrollTo({top})` **with no
+explicit `behavior`**, so paging inherited the container's value. Arrow /
+PageUp / PageDown / Space paging **was animated and is now instant.**
+
+This was accepted deliberately, on the grounds that it is already the shipped
+experience for every `prefers-reduced-motion` user via the override above.
+Paging still lands on exact snap positions — verified 45 → 46 → 47 forward and
+ArrowUp back to 46. It was never affected by the cancellation bug, because it
+only ever moves one adjacent slide.
+
+The alternative, if the glide is ever wanted back, is an explicit
+`behavior` at that single call site **guarded by `matchMedia`** — an
+unqualified `behavior:'smooth'` in JS would override the reduced-motion CSS and
+regress it.
+
+## pgdigital's live HTML is the master artifact — and it is NOT alone
+
+**No builder in this repo can regenerate pgdigital.** It predates `phase_1c`.
+`k-divider` and `data-slide-name` appear in no source file here, and
+`scroll-behavior` has never existed anywhere in this repo's git history. Do not
+go looking for a builder — the published HTML *is* the source.
+
+Do not confuse it with `out/` ("P&G Digital First Deck"), which is the Phase 1B
+output: 23 separate `pg_slide_NN.html` pages, no `.deck`, no rail. Different
+artifact, similar name.
+
+**But the reversion surface is real — embedded copies exist in `~/Downloads`:**
+
+| file | size | md5 | carries the bug |
+|---|---|---|---|
+| `Deck_WIP_2026-08-21_1002.html` | 147,410 | `e8a6fa34…` — **byte-identical to the pre-patch live file** | yes |
+| `pg-digital-first-embedded.html` | 79,511,127 | `6358120b…` | yes |
+| `PG_Deck_for_client/pg-digital-first-embedded.html` | 79,511,127 | `6358120b…` (same file) | yes |
+| `PG_Deck_for_client/pg-deck-view/pg-digital-first-deck/index.html` | 73,516 | — | **no — has no `scroll-behavior` at all** |
+
+**`Deck_WIP_2026-08-21_1002.html` is the hazard.** It was byte-identical to
+live, so re-exporting it from the Deck Editor silently reverts this fix. The
+patch was applied to the live repo only; **these local copies were deliberately
+not touched** — patching stale copies invites publishing the wrong one.
+
+The 73,516-byte variant is the interesting one: it has no `scroll-behavior`
+whatsoever and predates the embedded build by three minutes (04:13 vs 04:16 on
+2026-08-21). So `smooth` was added late in that session, and the deck shipped
+broken from that point.
+
+**Standing rule: pgdigital changes are made in `pgdigital-deck@gh-pages` and
+nowhere else.** If a Deck Editor round-trip is ever needed, re-import from the
+live file, not from a `~/Downloads` copy.
+
+## The HTML patch technique — recorded, having been used four times undocumented
+
+The decks that predate `phase_1c` have no builder, so the published HTML is the
+master. A change to one is a **surgical edit to the shipped file**, not a
+re-render. The technique, as actually practised:
+
+1. **Clone the publishing repo and edit there.** The `gh-pages` branch is both
+   the live file and the deploy target, so there is no separate publish step
+   and no chance of editing a copy that is not the one serving traffic.
+2. **Locate by anchored, counted match.** Confirm the string occurs exactly as
+   often as expected (`grep -c`) before editing, and delete or replace by line
+   with an anchored pattern. Never a bare global substitution.
+3. **Diff must be exactly the intended change.** `git diff` before committing;
+   if it shows more than the intended hunk, throw it away and start again.
+   Editors that reflow, minify, or re-encode are disqualified — this is why the
+   edit is done with `sed`/`Edit` and not by opening the file in a tool that
+   rewrites it.
+4. **Run a before/after control.** Serve the unpatched copy and the patched
+   copy from the same server to the same browser in the same session, and show
+   the defect reproducing on one and gone on the other. Without the control,
+   "it works now" does not distinguish the fix from the environment.
+5. **Leave deploy metadata alone.** `CNAME` in particular — it is the live
+   hostname, it is not part of the deck, and touching it takes the site down.
+6. **Record the parent commit as the revert target** in the same breath as the
+   fix, because there is no build to roll back to.
+7. **Enumerate the reversion surface.** Find every embedded or WIP copy that
+   could be re-exported over the fix, and record which ones carry the old bytes.
+   A single-file deck has no dependency graph to protect it — the only defence
+   is knowing the copies exist.
