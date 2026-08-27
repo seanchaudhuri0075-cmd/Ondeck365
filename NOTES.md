@@ -2496,3 +2496,134 @@ re-render. The technique, as actually practised:
    could be re-exported over the fix, and record which ones carry the old bytes.
    A single-file deck has no dependency graph to protect it — the only defence
    is knowing the copies exist.
+
+---
+
+# pgdigital — counter diagnosis, 1-based aliases, scroll-tracked URL (2026-08-27)
+
+**Commit `8cedd3b`** on `pgdigital-deck@gh-pages`. **Revert target: `4e10fd9`**
+(the scroll-behavior fix). Live bytes verified md5-identical to the commit
+(`20dbf64a…`), CNAME untouched, `~/Downloads` copies deliberately not patched
+and confirmed still at their original md5s.
+
+## Why the counter "did not track scroll" — it was never wired to
+
+The counter is **static text baked into `index.html`**: every `.slide` ships its
+own `<div class="num">NN / 50</div>`. A generator exists — `foot(s, total)`,
+emitting `String(s.n).padStart(2,"0") + " / " + total` — but the boot function
+guards it:
+
+```js
+if (!deck.querySelector(".slide")) { /* build */ } else { /* adopt markup */ }
+```
+
+The 50 slides ship as static markup, so **`buildSlide()` and `foot()` are dead
+code on the live deck.** The counters were baked at authoring time.
+
+**The whole file contained exactly one `addEventListener`, and it was
+`keydown`.** No scroll listener, no `hashchange`, no `popstate`, no `history.*`,
+no `location.hash` write. The one IntersectionObserver present only played and
+paused video. So nothing updated the counter and nothing updated the URL.
+
+Measured before changing anything: on desktop the static counters are in fact
+**correct**, and read correctly while scrolling — walking from `#slide-40`
+forward, sampling at each snap point and at 50% mid-scroll, there was always
+exactly one counter in the viewport, owned by the dominant slide (41→47). All
+50 are monotonic: `slide-N` carries `N+1 / 50`. The reported "frozen" reading is
+explained by the URL never changing: the address bar stays on whatever fragment
+was loaded, and any reload re-applies it and snaps back there.
+
+## What shipped — three additive changes, no id renamed
+
+1. **One-based fragment aliases.** Each slide gains a zero-size
+   `<span class="alias" id="slideN">` pinned to its top, N being the slide's
+   `data-n` — the number printed on screen. `#slide45` lands on the slide
+   reading `45 / 50`. The 0-based `slide-0 … slide-49` are untouched and still
+   resolve, so already-shared links keep working. **No script required for
+   this half** — it is markup plus one CSS rule.
+2. **Address bar follows the slide in view**, via `history.replaceState` and an
+   IntersectionObserver over a **zero-height band at the viewport midline**
+   (`rootMargin:"-50% 0px -50% 0px"`). ~11 lines.
+3. **slide-1's missing footer**, added to match the other 49.
+
+### Why a midline band and not a ratio threshold
+
+The five `.tall` slides (`slide-2, -3, -7, -22, -32`) exceed the viewport, so
+their intersection ratio can never reach a high threshold — `threshold:0.6`
+would have silently skipped exactly those five. A zero-height band has exactly
+one qualifying element at any scroll position regardless of element height.
+**This is the same failure the deck 9 player hit** ("a tile taller than the
+viewport can never reach ratio 0.5", `DECK9_HANDOFF.md` §12) — second time this
+bites. Treat a ratio threshold as wrong by default wherever elements may exceed
+the viewport.
+
+### Why `replaceState` and never `location.hash`
+
+Measured over 8 slide changes: `history.replaceState` added **0** history
+entries, `location.hash =` added **8**. The latter traps the back button behind
+one entry per slide. Verified after shipping: scrolling 11 slides added 0
+entries while the URL tracked as `#slide11`, `#slide2`, `#slide23`, each
+matching the printed counter.
+
+## slide-1 reads `02 / 50`, NOT `01 / 50`
+
+The request was for `01 / 50`. **That would have been wrong and was not
+shipped.** `slide-0` already carries `01 / 50`, and `slide-1` carries
+`data-n="2"`. Shipping `01` would have put a duplicate counter in front of the
+client and broken the run of 50. Bar set to 4% (2/50), matching the formula the
+other 49 use.
+
+slide-1 is `k-hero`, and was the only slide of 50 with **neither `.chrome` nor
+`.foot`** — its bare state looked deliberate, not accidental. Screenshotted
+after the change: the bar sits below the brand lockup without collision, hero
+crop intact. On desktop `.foot` is absolutely positioned and costs the hero no
+space; **below 900px it is in flow and takes 34px off the hero image.**
+
+## UNVERIFIED — mobile, below 900px
+
+The window resize bounced back to 1680×962 on every attempt, as it did in the
+previous session. **Nothing below the 900px breakpoint is confirmed**: not the
+aliases, not the URL tracking, and specifically **not the new hero footer**,
+which is the one change that consumes layout space at that breakpoint. Someone
+must open the live deck on a phone and look at the hero. Do not report this
+round as mobile-verified.
+
+## Method — two traps that each cost a session, and will recur
+
+### 1. A polluted browser tab produces confidently wrong results
+
+The first round of testing had `#slide45` landing on `slide-0` and results
+drifting by exactly one per call. **All of it was the test harness, not the
+deck.** Two causes, both self-inflicted:
+
+- Mutating `location.hash` in a loop had pushed **50 history entries** into the
+  tab, and the browser was restoring scroll positions from them.
+- **Assigning `location.hash` the value it already holds is a no-op** — no
+  navigation, no scroll. Once the new observer began rewriting the hash, many
+  of the test's own jumps silently never fired.
+
+**Rule: verify fragment navigation with a full page load in a fresh tab, not by
+assigning `location.hash` in a live page.** A full load is also what a shared
+link actually does. Re-run that way, every result was correct first time.
+
+### 2. A dead-looking IntersectionObserver is usually a tab that is not painting
+
+The new observer appeared completely dead — it never fired, and neither did any
+observer injected for comparison, **including one with the page's own working
+options**. There were no console errors.
+
+**Cause: the automation tab was not rendering.** `requestAnimationFrame` never
+fired within 45 seconds. IntersectionObserver callbacks are delivered during the
+render step, so with no paint there are no callbacks — ever. Videos will not
+autoplay either, for the same reason.
+
+**Diagnostic: race a rAF against a timeout. If rAF never fires, the tab is not
+painting and no observer result means anything.** The fix is to force a paint —
+taking a screenshot did it, and the URL immediately flipped to `#slide11`
+against a counter reading `11 / 50`, proving the observer had been correct all
+along.
+
+**This is the same trap as the deck 9 / Venus mobile review**, where per-tile
+player state was invisible enough to need a `?debug=1` overlay
+(`DECK9_HANDOFF.md` §12). Both times, observer-driven behaviour looked broken
+under automation when it was not. Check the paint before debugging the observer.

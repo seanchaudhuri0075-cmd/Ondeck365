@@ -1,8 +1,10 @@
 # Fragment navigation, slide identity & chapter anchors — Session Handoff
 
 **Date:** 2026-08-27
-**Status:** §1 FIXED and pushed (`pgdigital-deck@gh-pages` `4e10fd9`, revert
-target `fb60694`). §3–§6 still open — id scheme and chapter anchors untouched.
+**Status:** §1 FIXED (`4e10fd9`). §3 partly ADDRESSED on pgdigital via 1-based
+aliases (`8cedd3b`, revert target `4e10fd9`) — the builder-side ordinal problem
+is still open. §4 chapter anchors still open and now unblocked. Mobile below
+900px is UNVERIFIED throughout — see §7.
 
 Scope: everything a shareable per-slide or per-chapter link depends on —
 (1) does fragment navigation scroll at all, (2) do ids survive a Deck Editor
@@ -177,3 +179,65 @@ measured fragment above was `#slide-45`). **Do not rename them.** Links may
 already have been shared against them, and per §5 this host returns a hard 404
 rather than degrading — a renamed id fails outright. Any new scheme (§3) is
 **additive** on pgdigital: `slide-N` must keep resolving.
+
+**Satisfied as of `8cedd3b`** — see §7. The 1-based `#slideN` aliases are extra
+elements, not renames; all 50 `slide-N` ids were verified still resolving, with
+no duplicate ids in the document.
+
+
+---
+
+## 7. Counter, aliases and scroll-tracked URL — SHIPPED 2026-08-27
+
+**Commit `8cedd3b`, revert target `4e10fd9`.** Full record: `NOTES.md`
+§"pgdigital — counter diagnosis, 1-based aliases, scroll-tracked URL".
+
+### The counter was never wired to anything
+
+Static text baked per slide. The generator `foot(s, total)` exists but is **dead
+code** — boot adopts the shipped markup rather than building. The whole file had
+**one `addEventListener`, `keydown`**: no scroll, hash, popstate or history
+handling anywhere. The counters were correct; nothing updated the URL, which is
+what made the readout look stuck.
+
+### Shipped
+
+| | change | script? |
+|---|---|---|
+| aliases | zero-size `<span class="alias" id="slideN">` per slide, N = `data-n` | **none** |
+| URL tracking | `replaceState` + IO over a midline band | ~11 lines |
+| slide-1 | the missing `.foot`, `02 / 50` at 4% | none |
+
+`#slide45` → the slide reading `45 / 50`. `#slide-N` untouched and still
+resolving — verified for all 50, with no duplicate ids in the document.
+
+**`replaceState`, never `location.hash`:** measured 0 vs 8 history entries for 8
+slide changes. **Midline band, never a ratio threshold:** the five `.tall`
+slides can never reach a high ratio — the same failure the deck 9 player hit
+(§12 of `DECK9_HANDOFF.md`).
+
+### slide-1 is `02 / 50`, not `01 / 50`
+
+`slide-0` already carries `01 / 50` and slide-1 is `data-n="2"`. The requested
+`01` would have shipped a duplicate to the client.
+
+### UNVERIFIED — below 900px
+
+The window resize bounced back on every attempt, twice now. **Aliases, URL
+tracking and the new hero footer are all unconfirmed on mobile**, and the footer
+is in flow below 900px so it takes 34px off the hero image. Needs a real phone.
+
+### Two method traps, both of which recur
+
+1. **A polluted tab lies.** 50 history entries from a `location.hash` test loop
+   produced results drifting by one per call, and **assigning `location.hash`
+   its current value is a no-op**, so jumps silently never fired. Verify
+   fragment navigation with a **full page load in a fresh tab** — which is what
+   a shared link does anyway.
+2. **A dead IntersectionObserver is usually a tab that is not painting.** No
+   observer fired, including ones with the page's own working options, with no
+   console errors. `requestAnimationFrame` never fired in 45s — no render step
+   means no IO callbacks, ever, and no video autoplay either. **Race a rAF
+   against a timeout before debugging any observer.** Forcing a paint via
+   screenshot proved the observer had been right all along. Same trap as the
+   Venus mobile review.
