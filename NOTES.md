@@ -2627,3 +2627,104 @@ along.
 player state was invisible enough to need a `?debug=1` overlay
 (`DECK9_HANDOFF.md` §12). Both times, observer-driven behaviour looked broken
 under automation when it was not. Check the paint before debugging the observer.
+
+---
+
+# pgdigital — mobile scroll gate ported from hh (2026-08-27)
+
+**Commit `8c971d9`** on `pgdigital-deck@gh-pages`. **Revert target: `8cedd3b`.**
+Live bytes md5-identical to the commit (`040c6432…`), CNAME untouched,
+`~/Downloads` copies confirmed still at their original md5s.
+
+**Confirmed on a real phone by Sean**, after desktop was signed off: on hh a
+flick carries through several slides; on pgdigital every slide took a
+deliberate drag with no momentum. Third deck with this exact symptom, after
+HenHouse and Olay, and the same fix signed off on both.
+
+## The fix — two declarations, byte-identical to hh's
+
+```css
+@media (max-width:899px){
+  .deck{scroll-snap-type:none}
+  .slide{scroll-snap-stop:normal}
+}
+```
+
+Only the selectors differ: pgdigital uses `.deck` / `.slide`, hh uses `#deck` /
+`section.slide`. (pgdigital's element carries both `class="deck"` and
+`id="deck"`, but the CSS is written against the class.)
+
+## THE RULE — gate at the deck's own mobile boundary, not at hh's 820px
+
+**This is the third deck to take these two lines, and the next one will have its
+own boundary too. Do not copy the number.**
+
+hh gates at `max-width:820px` because **820 is hh's mobile breakpoint** — it is
+hh's only media query. pgdigital switches layout at `min-width:900px` /
+`max-width:899px`, so it gates at **899**.
+
+Copying `820` literally into pgdigital would have left **821–899px** in mobile
+layout — `.m-only` visible, all 13 `.artscroll` carousels live — while still
+carrying desktop snap: a band with the mobile problem and none of the fix.
+
+**The invariant being ported is "release snap wherever the deck is in mobile
+layout", not "release snap below 820px".** Read the target deck's own
+breakpoint first and gate there.
+
+## Why it works — geometry, not the keyword
+
+Measured: slide height == viewport == snap gap == 895px on every slide. With
+snap points exactly one viewport apart, `proximity` has nowhere to rest outside
+its threshold, so it re-targets every fling and animates on its own curve —
+**behaving identically to `mandatory`**. `scroll-snap-stop:always` then forbids
+travelling past even one point. Turning the snap container off is what returns
+the browser's own deceleration, because snap re-targeting is what overrides it.
+
+Accepted cost, same as hh's: slides no longer align on touch, so a flick can
+rest mid-slide.
+
+## Desktop untouched — measured, not assumed
+
+Sean had just signed desktop off, so this was verified before pushing. On the
+patched file at 1680px: `snap-type: y`, `snap-stop: always`, slide height 895 ==
+viewport, and **10 wheel ticks travel exactly 895px, snapped** — the same figure
+produced by the pre-patch file, the current file, and hh. The added rules live
+inside `max-width:899px` and cannot apply at ≥900px.
+
+## The 13 nested carousels — measured unaffected
+
+`.artscroll` (13 slides, all inside `.m-only`, so below 900px only) carries its
+own `scroll-snap-type:x proximity`. Computed values read before and after
+applying the gate:
+
+| property | before | after |
+|---|---|---|
+| `.deck` snap-type | `y` | **`none`** |
+| `.slide` snap-stop | `always` | **`normal`** |
+| `.artscroll` snap-type | `x` | `x` |
+| `.artscroll` overscroll-x | `contain` | `contain` |
+| `.artscroll img` snap-align | `start` | `start` |
+| `.artscroll` overflow-x | `auto` | `auto` |
+
+`scroll-snap-type` does not inherit, and each `.artscroll` is its own x-axis
+scroll container, so releasing the parent's y-axis snap cannot reach it.
+
+## UNVERIFIED — the diagonal-swipe caveat. Do NOT read this as tested.
+
+**Reasoned, not measured. Touch gestures are not testable in this environment.**
+
+Today's `scroll-snap-stop:always` acted as a brake: a vertical fling could not
+run past one slide, which incidentally masked the vertical component of a
+diagonal gesture on a carousel slide. With the gate released, **a diagonal swipe
+starting on one of those 13 slides may now carry vertically through several.**
+
+Chrome usually locks gesture direction on touch, which should contain it, and
+`overscroll-behavior-x:contain` handles horizontal end-of-travel — but it does
+not constrain vertical. **hh has no nested scrollers, so hh's sign-off does not
+cover this case and cannot be cited for it.**
+
+**This is the same shape the Venus/deck 9 mobile build was rejected over** — a
+horizontal scroller nested inside a vertical one, flagged in
+`DECK9_HANDOFF.md` §12 as "a plausible cause" of a scroll-feel complaint.
+Those 13 slides need a deliberate look on a phone. Until someone does that and
+records it here, this is an open risk, not a verified outcome.

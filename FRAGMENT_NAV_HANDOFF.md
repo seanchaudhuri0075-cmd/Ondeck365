@@ -1,10 +1,11 @@
 # Fragment navigation, slide identity & chapter anchors — Session Handoff
 
 **Date:** 2026-08-27
-**Status:** §1 FIXED (`4e10fd9`). §3 partly ADDRESSED on pgdigital via 1-based
-aliases (`8cedd3b`, revert target `4e10fd9`) — the builder-side ordinal problem
-is still open. §4 chapter anchors still open and now unblocked. Mobile below
-900px is UNVERIFIED throughout — see §7.
+**Status:** §1 FIXED (`4e10fd9`). §3 partly ADDRESSED via 1-based aliases
+(`8cedd3b`) — the builder-side ordinal problem is still open. §8 mobile scroll
+gate SHIPPED (`8c971d9`, revert target `8cedd3b`) and confirmed on a phone.
+§4 chapter anchors still open and now unblocked. Mobile below 900px remains
+UNVERIFIED for §7's changes, and §8 carries one explicitly untested risk.
 
 Scope: everything a shareable per-slide or per-chapter link depends on —
 (1) does fragment navigation scroll at all, (2) do ids survive a Deck Editor
@@ -241,3 +242,50 @@ is in flow below 900px so it takes 34px off the hero image. Needs a real phone.
    against a timeout before debugging any observer.** Forcing a paint via
    screenshot proved the observer had been right all along. Same trap as the
    Venus mobile review.
+
+
+---
+
+## 8. Mobile scroll gate — SHIPPED 2026-08-27
+
+**Commit `8c971d9`, revert target `8cedd3b`.** Full record: `NOTES.md`
+§"pgdigital — mobile scroll gate ported from hh".
+
+Sean confirmed on a real phone: on hh a flick carries through several slides, on
+pgdigital every slide took a deliberate drag. Third deck with this symptom after
+HenHouse and Olay; same fix signed off on both.
+
+```css
+@media (max-width:899px){
+  .deck{scroll-snap-type:none}
+  .slide{scroll-snap-stop:normal}
+}
+```
+
+### The rule for the next deck — gate at ITS OWN mobile boundary
+
+**Do not copy hh's `820`.** 820 is hh's mobile breakpoint; pgdigital's is
+900/899. Copying the number would have left 821–899px in mobile layout with
+desktop snap — the problem and none of the fix. The invariant is *release snap
+wherever the deck is in mobile layout*. Read the target deck's breakpoint first.
+
+### Why, and what it cost
+
+Snap points sit exactly one viewport apart (895 == slide == gap), so `proximity`
+has nowhere to rest outside its threshold and behaves as `mandatory`; `always`
+then forbids passing even one. Geometry, not the keyword. Accepted cost, as on
+hh: a flick can now rest mid-slide.
+
+**Desktop verified unchanged** before pushing, since Sean had just signed it
+off: at 1680px, snap-type `y`, stop `always`, and 10 wheel ticks travel exactly
+895px snapped — matching pre-patch, current, and hh.
+
+### UNVERIFIED — do not read as tested
+
+The 13 `.artscroll` carousels keep their own x-axis snap (measured before/after,
+all four properties unchanged). But the vertical brake that masked the vertical
+component of a **diagonal** swipe on those slides is now gone, and whether that
+carries is **untested — touch gestures are not testable in this environment**.
+hh has no nested scrollers so its sign-off does not cover it. **Same shape as
+the rejected Venus mobile build** (`DECK9_HANDOFF.md` §12). Open risk until
+someone checks those 13 slides on a phone and records it.
