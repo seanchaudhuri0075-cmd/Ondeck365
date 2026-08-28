@@ -60,7 +60,8 @@ class Ctx:
         self.cr: ColorResolver | None = None
         self.theme = None
         self.fsl = None
-        self.inherited = {"size_pt": None, "typeface": None, "color": None}
+        self.inherited = {"size_pt": None, "typeface": None, "color": None,
+                          "color_alpha": None}
 
     # ---- colour -------------------------------------------------------
     def solid(self, fill_el):
@@ -569,7 +570,17 @@ def _runs_of(ctx: Ctx, p_el, ph_size=None, ph_face=None):
         lat = rPr.find("a:latin", NS) if rPr is not None else None
         face = lat.get("typeface") if lat is not None else None
         size = float(rPr.get("sz")) / 100 if rPr is not None and rPr.get("sz") else None
-        col, _ = ctx.solid(rPr.find("a:solidFill", NS)) if rPr is not None else (None, None)
+        # THE SECOND ELEMENT IS NOT SPARE. `ctx.solid` returns (hex, alpha) and
+        # this discarded the alpha with `col, _`, so every authored <a:alpha> on a
+        # RUN fill was dropped between the parser and the model -- which is also
+        # why the run schema had no alpha field to consume. Deck 10 carries eight:
+        # slide 3's four agenda numerals (dk2 @ 50%) and the chapter numerals on
+        # slides 4/9/14/21 (bg2 @ 50%). All eight rendered pure white, i.e. at
+        # twice their authored weight against the photograph behind them.
+        # Shapes have carried `fill` + `fill_alpha` since the first builder; runs
+        # now carry the same pair under the same naming.
+        col, col_a = (ctx.solid(rPr.find("a:solidFill", NS))
+                      if rPr is not None else (None, None))
         t = r_.find("a:t", NS)
         runs.append({"text": (t.text or "") if t is not None else "",
                      "typeface": face or ph_face or ctx.inherited["typeface"],
@@ -578,7 +589,13 @@ def _runs_of(ctx: Ctx, p_el, ph_size=None, ph_face=None):
                      "declared_size": size, "ph_size": ph_size,
                      "bold": (rPr.get("b") == "1") if rPr is not None else False,
                      "italic": (rPr.get("i") == "1") if rPr is not None else False,
-                     "color": col or ctx.inherited["color"], "declared_color": col})
+                     "color": col or ctx.inherited["color"],
+                     "declared_color": col,
+                     # The alpha travels with the colour it belongs to: a run that
+                     # declares its own fill takes that fill's alpha (which may be
+                     # None, meaning opaque) and never the inherited one.
+                     "color_alpha": col_a if col else ctx.inherited["color_alpha"],
+                     "declared_color_alpha": col_a})
     return runs
 
 
@@ -912,7 +929,9 @@ def build_model(paths: DeckPaths,
     lvl1 = m.find("p:txStyles/p:otherStyle/a:lvl1pPr", NS)
     defr = lvl1.find("a:defRPr", NS) if lvl1 is not None else None
     ctx.inherited["size_pt"] = float(defr.get("sz")) / 100.0 if defr is not None and defr.get("sz") else 18.0
-    ctx.inherited["color"] = ctx.solid(defr.find("a:solidFill", NS))[0] if defr is not None else None
+    _inh_col, _inh_a = (ctx.solid(defr.find("a:solidFill", NS))
+                        if defr is not None else (None, None))
+    ctx.inherited["color"], ctx.inherited["color_alpha"] = _inh_col, _inh_a
     minor = troot.find(".//a:fontScheme/a:minorFont/a:latin", NS)
     major = troot.find(".//a:fontScheme/a:majorFont/a:latin", NS)
     ctx.inherited["typeface"] = minor.get("typeface") if minor is not None else None

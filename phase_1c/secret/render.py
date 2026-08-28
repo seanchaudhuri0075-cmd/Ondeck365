@@ -53,7 +53,12 @@ def run_css(r, W: float) -> str:
     if r.get("size_pt"):
         out.append(f"font-size:{r['size_pt'] / W * 100:.4f}cqw")
     if r.get("color"):
-        out.append(f"color:{r['color']}")
+        # Authored run-fill alpha, through the same rgba() every fill here uses.
+        # Eight runs in this deck declare one (deck-wide: slide 3's four agenda
+        # numerals, and the chapter numeral on 4/9/14/21), all at ~50%. They are
+        # a deliberate pale tint sitting on a photograph; at full opacity they
+        # read as a second headline competing with the title beside them.
+        out.append(f"color:{rgba(r['color'], r.get('color_alpha'))}")
     return ";".join(out)
 
 
