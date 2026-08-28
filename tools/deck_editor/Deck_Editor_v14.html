@@ -751,6 +751,28 @@ function fullParse(){
   renderList();sel(0);
 }
 
+/* EDITABLE IMAGES -- ONE PREDICATE, EVERYWHERE s.images IS INDEXED.
+   Three sites disagreed. silentParse pushed only srcs matching
+   (r2.dev|http|data:) but recorded `index` from the UNFILTERED NodeList;
+   saveDeck and deleteImage rebuilt the list filtering ONLY the 252x81
+   placeholder PNG. On any deck holding a RELATIVE src -- every external-media
+   deck, e.g. assets/img_*.webp -- the two lists differ, so s.images[i] and
+   imgs[i] are different <img> elements and an edit or a delete lands on the
+   wrong one. applySlideToDOM already used the parse predicate, so this makes
+   the other three agree with it rather than inventing a fourth.
+   The predicate is the NARROW one deliberately: widening it would change which
+   images the editor offers for swapping, which is a product decision, not this
+   defect. The R2 upload path (doR2/doR2Silent) rewrites srcs by urlMap over
+   every <img> and is unaffected either way. The media-editor overlay
+   (_mediaIndex/_applyMediaStyle) keeps its own broader filter: it is
+   self-consistent and addresses geometry on every image, not swappable srcs. */
+function editableImgs(sl){
+  return Array.from(sl.querySelectorAll('img')).filter(im=>{
+    const s=im.getAttribute('src')||'';
+    if(s.startsWith('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPwAAABR'))return false;
+    return s.includes('r2.dev')||s.startsWith('http')||s.startsWith('data:');
+  });
+}
 function silentParse(){
   const dp=new DOMParser(),doc=dp.parseFromString(rawHTML,'text/html');
   const els=doc.querySelectorAll('.slide');slides=[];
@@ -763,7 +785,7 @@ function silentParse(){
     const bn=sl.querySelector('.bbanner .t');if(bn) d.bodyTexts.push({html:bn.innerHTML,text:bn.textContent.trim(),index:d.bodyTexts.length,tag:'banner',origHTML:bn.innerHTML,origText:bn.textContent.trim()});
     sl.querySelectorAll('div[style*="font-size"]').forEach(dd=>{if((dd.closest('.L')||dd.closest('[style*="position:absolute;bottom"]'))&&!dd.querySelector('.t')&&dd.textContent.trim().length>10) d.bodyTexts.push({html:dd.innerHTML,text:dd.textContent.trim(),index:d.bodyTexts.length,tag:'body-div',origHTML:dd.innerHTML,origText:dd.textContent.trim()})});
     sl.querySelectorAll('video').forEach((v,vi)=>{let src=v.getAttribute('src')||'';const se=v.querySelector('source');if(!src&&se)src=se.getAttribute('src')||'';d.videos.push({src,index:vi,origSrc:src})});
-    sl.querySelectorAll('img').forEach((im,ii)=>{const src=im.getAttribute('src')||'';if(src.startsWith('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPwAAABR'))return;if(src.includes('r2.dev')||src.startsWith('http')||src.startsWith('data:'))d.images.push({src,index:ii,origSrc:src})});
+    editableImgs(sl).forEach((im,ii)=>{const src=im.getAttribute('src')||'';d.images.push({src,index:ii,origSrc:src})});
     const ri=sl.querySelector('.rack img');if(ri)d.logo={src:ri.getAttribute('src'),origSrc:ri.getAttribute('src')};
     slides.push(d);
   });
@@ -1027,10 +1049,7 @@ function deleteImage(slideIdx, imgIdx){
   const dp=new DOMParser(),doc=dp.parseFromString(rawHTML,'text/html');
   const sl=doc.querySelectorAll('.slide')[slideIdx];
   if(!sl)return;
-  const imgs=Array.from(sl.querySelectorAll('img')).filter(im=>{
-    const s=im.getAttribute('src')||'';
-    return !s.startsWith('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPwAAABR');
-  });
+  const imgs=editableImgs(sl);
   if(imgs[imgIdx])imgs[imgIdx].remove();
   rawHTML='<!DOCTYPE html>\n'+doc.documentElement.outerHTML;
   document.getElementById('prevFrame').srcdoc=rawHTML;
@@ -1292,7 +1311,7 @@ function applySlideToDOM(sl,s){
   const bodyEls=[];sl.querySelectorAll('.ci,.tlt,.tlb,.uct,.ucb,.cbi,.cc h3,.card h3,.fn,.agd,.sn,.sl').forEach(el=>bodyEls.push(el));const bn=sl.querySelector('.bbanner .t');if(bn)bodyEls.push(bn);sl.querySelectorAll('div[style*="font-size"]').forEach(dd=>{if((dd.closest('.L')||dd.closest('[style*="position:absolute;bottom"]'))&&!dd.querySelector('.t')&&dd.textContent.trim().length>10)bodyEls.push(dd)});
   s.bodyTexts.forEach((b,bi)=>{if(bodyEls[bi]&&b.text!==b.origText){let n=b.text;const m=b.origHTML.match(/^(<span[^>]*>[^<]*<\/span>)/);if(m)n=m[1]+b.text;bodyEls[bi].innerHTML=n}});
   const vidEls=sl.querySelectorAll('video');s.videos.forEach((v,vi)=>{if(vidEls[vi]&&v.src!==v.origSrc&&v.src){const ve=vidEls[vi];ve.setAttribute('src',v.src);ve.setAttribute('autoplay','');ve.setAttribute('muted','');ve.setAttribute('loop','');ve.setAttribute('playsinline','');const se=ve.querySelector('source');if(se)se.setAttribute('src',v.src)}});
-  const imgEls=[];sl.querySelectorAll('img').forEach(im=>{const src=im.getAttribute('src')||'';if(src.startsWith('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPwAAABR'))return;if(src.includes('r2.dev')||src.startsWith('http')||src.startsWith('data:'))imgEls.push(im)});
+  const imgEls=editableImgs(sl);
   s.images.forEach((im,ii)=>{if(imgEls[ii]&&im.src!==im.origSrc&&im.src)imgEls[ii].setAttribute('src',im.src)});
   const ri=sl.querySelector('.rack img');if(ri&&s.logo&&s.logo.src!==s.logo.origSrc)ri.setAttribute('src',s.logo.src);
 }
@@ -1359,7 +1378,7 @@ function saveDeck(){
     // Videos
     sl.querySelectorAll('video').forEach((v,vi)=>{if(s.videos[vi]&&s.videos[vi].src)v.setAttribute('src',s.videos[vi].src)});
     // Images
-    const imgs=Array.from(sl.querySelectorAll('img')).filter(im=>{const src=im.getAttribute('src')||'';return !src.startsWith('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPwAAABR')});
+    const imgs=editableImgs(sl);
     s.images.forEach((im,ii)=>{if(imgs[ii]&&im.src)imgs[ii].setAttribute('src',im.src)});
     // Logo
     const ri=sl.querySelector('.rack img');if(ri&&s.logo&&s.logo.src)ri.setAttribute('src',s.logo.src);
