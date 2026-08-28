@@ -83,6 +83,59 @@ _BUNDLED_FONTS = (
 #
 # (family, filename, weight, format, mime, unicode-range, font-stretch)
 _OPTIONAL_FONTS = {
+    # ---------------------------------------------------------------- deck 10
+    # Secret (2026-08-27). FIVE entries, and the two groups are NOT the same
+    # kind of decision — read the distinction before reusing any of them.
+    #
+    # GROUP 1 — NOT substitutes. These are the deck's OWN faces, shipping as
+    # themselves because both happen to be SIL OFL. Nothing is being matched.
+    # They were missed at first because the runs declare no face: the chain is
+    # run -> layout placeholder -> MASTER PLACEHOLDER lstStyle, and the master's
+    # `title` placeholder declares Bebas Neue Regular while its `body`
+    # placeholder declares Darker Grotesque Medium. Reading only the master's
+    # <p:txStyles> (which says Arial) rendered 11 runs in the wrong face —
+    # including BEAUTY, which needs 4.001em in Arial against a 2.947em box.
+    "Bebas Neue": (
+        ("Bebas Neue", "BebasNeue-400.woff2", 400, "woff2", "font/woff2", None, None),
+    ),
+    "Darker Grotesque": (
+        ("Darker Grotesque", "DarkerGrotesque-var.woff2", "300 900",
+         "woff2-variations", "font/woff2", None, None),
+    ),
+    #
+    # GROUP 2 — substitutes for proprietary faces, and all three are SHAPE
+    # judgements made where WIDTH DID NOT DISCRIMINATE. Do not read any of them
+    # as a measured winner. The deck's geometry gives a width BUDGET per string
+    # (an upper bound, not a target), and on the display titles six candidates
+    # sat within 12-15% of each other — a tie. The picks were made by Sean
+    # against his own PowerPoint screenshots, on weight and colour, not by the
+    # numbers. The numbers only ruled candidates OUT.
+    #
+    # Anton for Aura AT: mean slack +16.2% (7th of 17 that fit; the tightest
+    # was Asap Condensed at +11.7%). Chosen because Aura AT reads near-black in
+    # the source and Anton is the only candidate in that weight range — Asap
+    # Condensed and PT Sans Narrow measure better and are regular-weight text
+    # faces that would look wrong. SIL OFL.
+    "Anton": (
+        ("Anton", "Anton-400.woff2", 400, "woff2", "font/woff2", None, None),
+    ),
+    # PT Sans Narrow for Univers Condensed (the 01-04 chapter numbers): the
+    # only face top-3 on BOTH constraints, landing exactly on the 0.900em
+    # two-digit budget (+0.0% slack). SIL OFL.
+    "PT Sans Narrow": (
+        ("PT Sans Narrow", "PTSansNarrow-400.woff2", 400, "woff2", "font/woff2", None, None),
+    ),
+    # Roboto Condensed for Univers (126 runs of body/label text): width CANNOT
+    # choose here at all — the long strings budget 0.177-0.239 em/char, which
+    # no mixed-case face achieves, so they wrap in PowerPoint and constrain
+    # nothing, while the short labels clear ~1.09 em/char trivially. Chosen on
+    # shape: x-height 0.528 (matching Archivo's, the previous pick) with a
+    # tighter lc advance of 0.403, which suits the 8-9pt plate labels that
+    # dominate this deck. Apache 2.0.
+    "Roboto Condensed": (
+        ("Roboto Condensed", "RobotoCondensed-var.woff2", "100 900",
+         "woff2-variations", "font/woff2", None, None),
+    ),
     # Archivo variable (wght 100-900, wdth 62-125), SIL OFL.
     # Matched-metric substitute for Franklin Gothic Book at wdth=94 —
     # measured, not assumed. Every text box in the Olay deck carries

@@ -2840,3 +2840,165 @@ not rendering**, which is the trap recorded earlier in this file.
 
 106 ids, zero duplicates; all 50 legacy ids, 50 aliases, 50 counters and 5
 chapter anchors still correct; no console errors originating from the deck.
+
+---
+
+# PRODUCT — font licensing is a pipeline problem, not a deck problem (2026-08-27)
+
+Surfaced by deck 10 but **not specific to it.** Every deck this pipeline
+converts raises the same question, and until now it has been answered silently.
+
+## A converter cannot sub-license its customers' desktop fonts
+
+Deck 10 embeds four faces. Their `fsType` bits, read off the EOT headers:
+
+| face | fsType | meaning |
+|---|---|---|
+| Aura AT, Bebas Neue | `0x0000` | Installable, no restriction |
+| **Univers** (regular + bold, condensed + bold) | `0x0008` | **Editable embedding** |
+
+**`fsType` governs embedding in a DOCUMENT, not redistribution as a webfont.**
+"Editable embedding" permits the binary travelling inside the `.pptx` so the
+file can be opened and edited. It does not permit extracting that binary and
+serving it from `@font-face` on a public origin, which is what publishing a
+converted deck would do. The permission bit is not a web licence and must never
+be read as one.
+
+Two further blockers, either of which is independently fatal:
+
+- **The embedded copies are technically unusable anyway.** All six parts are
+  EOT v2.2 with `TTCOMPRESSED` (MicroType Express). There is no decompressor in
+  this toolchain, and two parts that appeared to parse were a coincidental
+  `00010000` byte match yielding zero tables.
+- **They are subset.** Five of six carry the EOT `SUBSET` flag — only the
+  glyphs the deck currently uses. The Deck Editor exists so a client can edit
+  text; the first character typed outside the subset renders `.notdef`.
+
+See LEARNINGS rule 38, which covers the same ground from the measurement side.
+
+## The three durable positions
+
+There is no fourth. A converter either:
+
+1. **Customer supplies a web licence** for their brand face. Univers is
+   Monotype; web use is a pageview-metered webfont licence the client may
+   already hold. Worth asking rather than assuming — Aura AT's provenance
+   should be chased with whoever supplied the deck.
+2. **The brand face is already OFL.** Deck 10 is a live example and it is
+   luckier than it looks: Bebas Neue AND Darker Grotesque are both SIL OFL, and
+   between them they carry every run in the deck that inherits its face. Those
+   ship as themselves, no substitution, no licence to buy.
+3. **Substitute and DISCLOSE.**
+
+## Our substitution is currently silent, and that is the gap
+
+Today a deck is converted, a substitute is chosen, and nothing in the output,
+the manifest or the client-facing artefact says so. The client sees type that
+is not their type and is given no way to know. Every substitution in the corpus
+so far — Univers→?, Aura AT→?, Franklin Gothic Book→Archivo, Boston
+SemiBold→Poppins, DIN Condensed→Barlow Condensed, Gotham→Montserrat,
+Helvetica Light→Archivo — was a judgement made inside the pipeline and never
+surfaced.
+
+**A visible per-deck record — "fonts substituted: Univers → X, Aura AT → Y" —
+makes the tradeoff the customer's to accept rather than ours to make on their
+behalf.** It costs a manifest field and a line in the handoff. It also creates
+the natural moment to ask position 1: a client who can see the substitution is
+a client who can tell you they hold the licence.
+
+This is the same advisory/authoritative split `PHASE_1C_ARCHITECTURE.md`
+mandates for the deck classifier, applied one level out: the pipeline may
+choose a substitute, but it must not conceal that it chose.
+
+---
+
+# Deck 10 render round — carried defects and cross-builder debt (2026-08-28)
+
+Five fixes landed this round (LEARNINGS rule 41). What follows is what was
+found and NOT fixed, recorded so none of it is rediscovered.
+
+## Old Spice drops 4 authored `<a:br/>` — a live fidelity gap on a signed-off deck
+
+`OldSpice_Destination_ProductSeries_Variants_CreativeDeck_R1.pptx` carries
+**4 `<a:br>` on 2 shapes**: slide 15 `Content Placeholder 2` (x1) and slide 25
+`Content Placeholder 2` (x3) — the "Concept:" prose blocks on the two
+occluded-duplicate slides. `phase_1c/oldspice/render.py` never reads
+`br_after`, so all four authored line breaks are discarded and the prose runs
+together.
+
+**Not fixed.** It is a real fidelity improvement but it moves a deck that was
+signed off, so it needs its own decision and its own review round. The helper
+it would use already exists: `phase_1c/deckkit/markup.py::runs_html`.
+
+Deck-wide `<a:br>` census, for whoever picks this up: olay **0**,
+venus_hestia **0**, GAP **0** (checked across all three revisions OSR5/6/7),
+oldspice **4**, secret **2**.
+
+## Deck 10 ships faux bold on the chapter numbers
+
+The `01`–`04` runs declare `b="1"` in the source. Only **PT Sans Narrow 400**
+is bundled, so the browser synthesises the bold. Measured advance is exactly
+0.900000 em, i.e. synthesis is not widening the glyphs here — so this is not
+contributing to any layout defect. It is a pure fidelity gap: authored bold,
+rendered as a synthetic approximation. Fix is to bundle the real bold cut.
+
+## The percentage-padding bug is in FOUR other builders
+
+Fixed in deck 10 only (`phase_1c/secret/render.py`). Still present, each
+inflating its vertical insets by that deck's own aspect ratio:
+
+| builder | line | factor |
+|---|---|---|
+| `phase_1c/henhouse/render.py` | 742–743 | 1.778 |
+| `phase_1c/olay/render.py` | 262 | 1.778 |
+| `phase_1c/oldspice/render.py` | 199 | 1.778 |
+| `phase_1c/venus_hestia/render.py` | 121 | 1.545 (1224x792) |
+
+`venus_hestia` states the wrong model most explicitly —
+`(H if k in 'tb' else W)` — which is exactly the reasoning CSS does not honour.
+
+## SIX defects have now been found in one builder and absent from the others
+
+1. mobile scroll gate (HenHouse → Olay, **missed on Old Spice**)
+2. `--ar` consumer (HenHouse only; deck 9 produced it and consumed it nowhere)
+3. crop-frame clip `overflow:hidden` (rule 29)
+4. `prst="ellipse"` → `border-radius` (Old Spice only; deck 10 shipped 87
+   ellipses as rectangles across 23 of 31 slides)
+5. `br_after` (HenHouse only)
+6. percentage padding (all five, fixed in one)
+
+**Four of the six surfaced on deck 10 alone.** `deckkit` now holds
+`mobile_scroll_release`, `media_box_reserve`, `crop_frame_clip`, `prst_css`,
+`archetype_of` and `markup.runs_html` — but only deck 10 consumes the newer
+ones, so the debt is now *duplicated primitives* rather than *missing* ones.
+
+**A shared-primitive migration pass is overdue.** The argument for deferring it
+has been the same each time — migrating a signed-off deck needs its own review
+— and the cost of deferring has been one rediscovery per deck. That trade
+should be made deliberately rather than by default.
+
+## OPEN — deck 10 divider titles still overflow by ~123 pt
+
+Slides 4, 9, 14, 21. `Title 3` renders 176.7pt of ink in a 54.06pt inner box.
+
+**Authored spacing is now honoured** — the 75% from layout3's `lvl1pPr` is
+read, giving `line-height: 0.9101` (0.75 x the deck's recovered 1.2135) and
+66.44pt per line, down from Anton's natural 109.89pt. That took the overflow
+from +165.7 to +122.6 and the overlap with the label list from 56.7 to 35.0pt.
+
+**The residual is attributable to the substitute.** Anton's cap/em is
+**0.8594** against 0.686–0.711 for every other bundled face, and its natural
+content area is **1.5054** against ~1.2 — both outliers. At 73pt its caps stand
+12.7pt taller than a 0.70 cap/em face would; a 0.70 face needs 89.6pt nominal
+to match.
+
+**Aura AT's real metrics are NOT recoverable from the PPTX.** The embedded part
+is EOT v2.2 `TTCOMPRESSED` (MicroType Express) with no decompressor available;
+the EOT header yields PANOSE, `usWeightClass` and names only — no cap height,
+no advances, no unitsPerEm. So how much of the residual is genuine authored
+overflow cannot be answered from the source.
+
+**Unresolved, pending comparison against Sean's PowerPoint screenshots.** Do
+not resolve it against LibreOffice: per rule 40, LO lacks Aura AT, Univers and
+Bebas Neue and substitutes all three, so any comparison is one substitution
+against another.

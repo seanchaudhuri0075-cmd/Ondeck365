@@ -90,7 +90,7 @@ def _probe(path: Path) -> dict:
 
 def build_videos(paths: DeckPaths, used: set[str], crf: int = VIDEO_CRF,
                  preset: str = VIDEO_PRESET, bitrate: str | None = None,
-                 progress: bool = False) -> dict:
+                 copy: bool = False, progress: bool = False) -> dict:
     """Sequential + atomic (rule 8). Aspect is PROBED, never assumed — deck 8
     is the first with mixed aspects (1:1 and 9:16, no 16:9 anywhere), so a
     hardcoded container ratio would crop or letterbox most of them.
@@ -101,7 +101,21 @@ def build_videos(paths: DeckPaths, used: set[str], crf: int = VIDEO_CRF,
     RATE, not a fixed quality, because the deliverable is bounded by what can
     be shipped rather than by a quality target. 5 Mbps was chosen over 3 Mbps
     on the 1080x1080 clip, whose fine bottle-label type softens first.
-    `-maxrate`/`-bufsize` cap the peak so a busy frame cannot blow the budget."""
+    `-maxrate`/`-bufsize` cap the peak so a busy frame cannot blow the budget.
+
+    `copy` stream-copies instead of re-encoding, for a source that is ALREADY
+    web-rate. Deck 10 (Secret) is the first: 7 clips, H.264, 0.97-2.73 Mbps,
+    15.5 MB total. Re-encoding those at CRF 23 is generation loss bought with
+    CPU -- a second lossy pass over frames that were already compressed once,
+    for no size win worth having. The container is still rewritten, so
+    `+faststart` (moov atom first, which is what makes `preload="none"` +
+    range requests stream rather than stall) and `-an` still apply.
+
+    The two switches now bracket the decision: `bitrate` when the source is far
+    too heavy for the web (deck 9, 24 Mbps), `copy` when it already is not
+    (deck 10). Neither is a default, because "what should happen to this deck's
+    video" is a measured per-deck call and should read as one at the call
+    site."""
     paths.assets.mkdir(parents=True, exist_ok=True)
     manifest = {}
     for name in sorted(used):
@@ -115,13 +129,18 @@ def build_videos(paths: DeckPaths, used: set[str], crf: int = VIDEO_CRF,
         partial = paths.assets / f"vid_{digest}.__partial.mp4"
         if not dst.exists():
             partial.unlink(missing_ok=True)
-            rate = (["-b:v", bitrate, "-maxrate", bitrate,
-                     "-bufsize", f"{int(bitrate.rstrip('Mm')) * 2}M"]
-                    if bitrate else ["-crf", str(crf)])
+            if copy:
+                assert not bitrate, "copy and bitrate are mutually exclusive"
+                vcodec = ["-c:v", "copy"]
+            else:
+                rate = (["-b:v", bitrate, "-maxrate", bitrate,
+                         "-bufsize", f"{int(bitrate.rstrip('Mm')) * 2}M"]
+                        if bitrate else ["-crf", str(crf)])
+                vcodec = ["-c:v", "libx264", *rate, "-preset", preset,
+                          "-pix_fmt", "yuv420p"]
             subprocess.run(
                 ["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", str(src),
-                 "-c:v", "libx264", *rate, "-preset", preset,
-                 "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", str(partial)],
+                 *vcodec, "-movflags", "+faststart", "-an", str(partial)],
                 check=True)
             partial.replace(dst)
         if progress:

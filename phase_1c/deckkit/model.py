@@ -242,6 +242,159 @@ def build_ph_geometry(paths: DeckPaths) -> dict:
     return out
 
 
+# A placeholder inherits from the master placeholder of its FAMILY, not of its
+# own literal type: ctrTitle and title both resolve against the master's title
+# placeholder, subTitle and body against its body placeholder. Deck 10's cover
+# is a `ctrTitle` and the master only declares `title`, so without this the
+# walk stopped one level short and fell through to the deck default.
+_PH_FAMILY = {"ctrTitle": "title", "title": "title",
+              "subTitle": "body", "body": "body"}
+
+
+def resolve_ph_text(ph_text, layout_name, master_name, ph_type, lvl):
+    """{sz, face} for a placeholder level: layout first, then master, per key."""
+    fam = _PH_FAMILY.get(ph_type or "body", ph_type or "body")
+    out = {}
+    for src, key in ((layout_name, ph_type or "body"), (master_name, fam)):
+        ent = (ph_text.get(src, {}).get(key) or {})
+        lv = ent.get(lvl) or ent.get(0) or {}
+        for k in ("sz", "face", "lnspc"):
+            if k not in out and lv.get(k):
+                out[k] = lv[k]
+    return out
+
+
+def build_ph_bodypr(paths: DeckPaths) -> dict:
+    """{layout filename: {ph type: {anchor, wrap, insets}}} from each layout
+    placeholder's <a:bodyPr>.
+
+    Deck 10's slide-level bodyPr is literally `<a:bodyPr/>` -- empty -- on
+    every divider title. Everything that governs how the text sits in its box
+    lives on the LAYOUT placeholder: `anchor="ctr"` and all four insets at
+    91425 EMU. Reading only the slide's copy meant defaulting to top-anchored
+    with no padding, and with 73pt type in a 68.5pt box the anchor decides
+    where the overflow goes -- centred it splits above and below, top-anchored
+    it all falls into the badge column underneath.
+
+    This is the same chain as build_ph_textstyles and the layout background:
+    slide -> layout -> master. That chain is not three properties, it is every
+    inherited property, and fixing it three at a time is how deck 10 needed
+    three review rounds.
+    """
+    out = {}
+    for src in sorted((paths.raw / "ppt" / "slideLayouts").glob("slideLayout*.xml")):
+        root = etree.parse(str(src)).getroot()
+        per = {}
+        for sp in root.iter():
+            if etree.QName(sp).localname != "sp":
+                continue
+            ph = sp.find(".//p:nvSpPr/p:nvPr/p:ph", NS)
+            bp = sp.find("p:txBody/a:bodyPr", NS)
+            if ph is None or bp is None:
+                continue
+            per[ph.get("type") or "body"] = {
+                "anchor": bp.get("anchor"),
+                "wrap": bp.get("wrap"),
+                "insets": {k: (float(bp.get(a_)) / EMU_PT if bp.get(a_) else None)
+                           for k, a_ in (("l", "lIns"), ("r", "rIns"),
+                                         ("t", "tIns"), ("b", "bIns"))},
+            }
+        out[src.name] = per
+    return out
+
+
+def build_ph_textstyles(paths: DeckPaths) -> dict:
+    """{layout filename: {ph type: {lvl (0-based): size_pt}}} from each layout
+    placeholder's own <a:lstStyle>.
+
+    NOTES records this walk (P&G, `_shared.resolve_inherited_size`) with its
+    layout step "deferred -- no slide currently in scope uses layout
+    overrides; placeholder for future expansion". Deck 10 is that expansion.
+    Its divider titles carry `<a:rPr lang="en-US" dirty="0">` -- no `sz` at
+    all -- and the size lives on slideLayout3's title placeholder as
+    `sz="7300"`. Without this walk the run falls all the way through to the
+    deck default (14pt here) and a 73pt display title renders at a fifth of
+    its authored size, which is what the first render did.
+
+    Captures SIZE and FACE. Colour keeps its existing fallback.
+
+    FACE was deliberately excluded on the first pass and that was wrong. Deck
+    10's master `title` placeholder declares `Bebas Neue Regular` and its
+    `body` placeholder declares `Darker Grotesque Medium`, both in their OWN
+    <a:lstStyle> -- while the master's <p:txStyles> says Arial. 11 runs declare
+    no face and inherit; reading only txStyles put every one of them in Arial,
+    which for BEAUTY needs 4.001em against a 2.947em box and cannot fit. The
+    SLIDE MASTER's placeholders are part of this walk, not just the layouts'.
+    """
+    out = {}
+    srcs = (sorted((paths.raw / "ppt" / "slideLayouts").glob("slideLayout*.xml"))
+            + sorted((paths.raw / "ppt" / "slideMasters").glob("slideMaster*.xml")))
+    for src in srcs:
+        root = etree.parse(str(src)).getroot()
+        per = {}
+        for sp in root.iter():
+            if etree.QName(sp).localname != "sp":
+                continue
+            ph = sp.find(".//p:nvSpPr/p:nvPr/p:ph", NS)
+            ls = sp.find("p:txBody/a:lstStyle", NS)
+            if ph is None or ls is None:
+                continue
+            lvls = {}
+            for i in range(1, 10):
+                lvl = ls.find(f"a:lvl{i}pPr", NS)
+                if lvl is None:
+                    continue
+                ent = {}
+                # lnSpc hangs off the lvl{i}pPr ITSELF, not off its defRPr --
+                # which is why reading only defRPr silently dropped it. Deck 10
+                # declares the divider titles' 73pt and their 75% line spacing
+                # on the SAME element; the size was read and the spacing was
+                # not, so `line-height` fell to the substitute font's own
+                # natural metric (Anton, 1.5054 -- double the authored value).
+                # That is LEARNINGS rule 17/34's failure exactly: inheriting
+                # the substitute's ratio instead of the source's.
+                sp_ = lvl.find("a:lnSpc/a:spcPct", NS)
+                if sp_ is not None and sp_.get("val"):
+                    ent["lnspc"] = int(sp_.get("val")) / 100000.0
+                d = lvl.find("a:defRPr", NS)
+                if d is not None:
+                    lat = d.find("a:latin", NS)
+                    if d.get("sz"):
+                        ent["sz"] = float(d.get("sz")) / 100.0
+                    if lat is not None and lat.get("typeface"):
+                        ent["face"] = lat.get("typeface")
+                if ent:
+                    lvls[i - 1] = ent
+            if lvls:
+                per[ph.get("type") or "body"] = lvls
+        out[src.name] = per
+    return out
+
+
+def build_layout_index(paths: DeckPaths) -> dict:
+    """{layout filename: {"name": authored <p:cSld name>, "type": sldLayout type}}.
+
+    The layout a slide inherits is the deck author's own structural statement,
+    and until deck 10 nothing read it. Deck 10 (Secret) names its five chapter
+    dividers by giving them a layout called SECTION_TITLE_AND_DESCRIPTION --
+    a cleaner marker than pgdigital's `k-divider` class, because the author
+    typed it rather than a converter inferring it.
+
+    Read, never interpreted. What a given name MEANS is a per-deck declaration
+    (the deck's own roles.py), for the same reason PHASE_1C_ARCHITECTURE.md
+    gives for the deck classifier: a shared table that guessed would eventually
+    guess wrong on an unseen deck, and a wrong archetype is exactly the
+    "trusted instead of checked" failure that doc names.
+    """
+    out = {}
+    for src in sorted((paths.raw / "ppt" / "slideLayouts").glob("slideLayout*.xml")):
+        root = etree.parse(str(src)).getroot()
+        cs = root.find("p:cSld", NS)
+        out[src.name] = {"name": cs.get("name") if cs is not None else None,
+                         "type": root.get("type")}
+    return out
+
+
 def resolve_ph_geometry(el, layout_name, ph_geo):
     """Layout first, then master; match on (type, idx) then on type alone."""
     k = _ph_key(el)
@@ -261,7 +414,7 @@ def _local(el):
     return t.rsplit("}", 1)[-1] if isinstance(t, str) else ""
 
 
-def _runs_of(ctx: Ctx, p_el):
+def _runs_of(ctx: Ctx, p_el, ph_size=None, ph_face=None):
     """Runs in DOCUMENT order, with <a:br/> recorded as a break.
 
     ondeck/parse/text.py notes that <a:br> was "punted in Phase 1B; surface if
@@ -285,20 +438,26 @@ def _runs_of(ctx: Ctx, p_el):
         col, _ = ctx.solid(rPr.find("a:solidFill", NS)) if rPr is not None else (None, None)
         t = r_.find("a:t", NS)
         runs.append({"text": (t.text or "") if t is not None else "",
-                     "typeface": face or ctx.inherited["typeface"], "declared_face": face,
-                     "size_pt": size if size else ctx.inherited["size_pt"], "declared_size": size,
+                     "typeface": face or ph_face or ctx.inherited["typeface"],
+                     "declared_face": face, "ph_face": ph_face,
+                     "size_pt": size or ph_size or ctx.inherited["size_pt"],
+                     "declared_size": size, "ph_size": ph_size,
                      "bold": (rPr.get("b") == "1") if rPr is not None else False,
                      "italic": (rPr.get("i") == "1") if rPr is not None else False,
                      "color": col or ctx.inherited["color"], "declared_color": col})
     return runs
 
 
-def _paras_of(ctx: Ctx, tx):
+def _paras_of(ctx: Ctx, tx, ph_lvls=None):
     """Paragraphs with bullet, alignment and indent. <a:buNone/> is an explicit
     'no bullet' and must not be read as 'no bullet property stated'."""
     out = []
     for p in tx.findall("a:p", NS):
         pPr = p.find("a:pPr", NS)
+        lvl = int(pPr.get("lvl") or 0) if pPr is not None else 0
+        _e = (ph_lvls or {}).get(lvl) or (ph_lvls or {}).get(0) or {}
+        ph_size, ph_face = _e.get("sz"), _e.get("face")
+        ph_lnspc = _e.get("lnspc")
         bullet = None
         if pPr is not None and pPr.find("a:buNone", NS) is None:
             bc = pPr.find("a:buChar", NS)
@@ -307,9 +466,12 @@ def _paras_of(ctx: Ctx, tx):
         ln = pPr.find("a:lnSpc/a:spcPct", NS) if pPr is not None else None
         out.append({"align": pPr.get("algn") if pPr is not None else None,
                     "bullet": bullet,
-                    "line_pct": int(ln.get("val")) / 100000.0 if ln is not None else None,
+                    # own lnSpc wins; otherwise the placeholder's, which is
+                    # authored just as much and was previously invisible.
+                    "line_pct": (int(ln.get("val")) / 100000.0 if ln is not None
+                                 else ph_lnspc),
                     "marL": float(pPr.get("marL")) / EMU_PT if pPr is not None and pPr.get("marL") else None,
-                    "runs": _runs_of(ctx, p)})
+                    "runs": _runs_of(ctx, p, ph_size, ph_face)})
     return out
 
 
@@ -427,6 +589,25 @@ def _slide_master_theme(paths: DeckPaths) -> Path:
     raise AssertionError("slide master references no theme")
 
 
+def _slide_master_themes(paths: DeckPaths) -> set:
+    """Every theme reachable from a SLIDE master — the only themes that can paint.
+
+    A package theme is not automatically a rendering surface. A notes master
+    carries its own theme and Office gives it the stock "Default" scheme, which
+    differs from a designed slide theme on almost every token by construction.
+    Comparing against it asks whether two unrelated documents agree.
+    """
+    out = set()
+    for m in sorted((paths.raw / "ppt" / "slideMasters").glob("slideMaster*.xml")):
+        rp = m.parent / "_rels" / (m.name + ".rels")
+        if not rp.exists():
+            continue
+        for r in etree.parse(str(rp)).getroot():
+            if r.get("Type").rsplit("/", 1)[-1] == "theme":
+                out.add((m.parent / r.get("Target")).resolve())
+    return out
+
+
 def _referenced_scheme_keys(paths: DeckPaths) -> set[str]:
     """Every scheme colour token that a RENDERING part actually names.
 
@@ -479,8 +660,26 @@ def build_model(paths: DeckPaths,
     # a hard failure -- it would silently paint a wrong colour, which is what
     # this assertion exists to prevent. A difference confined to tokens nothing
     # references is recorded and built through.
+    # NARROWED AGAIN, deck 10 (Secret), 2026-08-27. The deck-9 pass above
+    # narrowed this to referenced TOKENS but kept comparing against every theme
+    # in the package -- and deck 10 shows that was the wrong axis. Its themes
+    # disagree on five tokens the slides genuinely reference (dk1/lt1/dk2/lt2/
+    # accent1), so the token filter does not save it, and the build failed on a
+    # comparison that should never have been made: theme2 is the NOTES master's
+    # theme (Office's stock "Default" scheme) and cannot paint a slide.
+    #
+    # The right question is not "do the packaged themes agree" but "can more
+    # than one theme paint a slide, and do those agree". Compare only themes
+    # reachable from a slide master. With one slide master the check is vacuous,
+    # which is correct: there is nothing that could disagree. A deck with two
+    # slide masters on different themes still fails hard, which is the case the
+    # assertion was written for.
+    #
+    # Same family as LEARNINGS rule 35's sibling instance and the Patchology
+    # 767/768 sliver: a declaration existing is not a consumer existing.
     referenced = _referenced_scheme_keys(paths)
-    others = sorted(p for p in theme_dir.glob("theme*.xml") if p != theme_path)
+    painting = _slide_master_themes(paths)
+    others = sorted(p for p in painting if p != theme_path)
     tvals = asdict(theme)
     differing, conflicts = set(), {}
     for op in others:
@@ -498,7 +697,10 @@ def build_model(paths: DeckPaths,
         f"Slide master uses {theme_path.name}; resolving with it would paint a "
         f"different colour than another theme in the package specifies.")
 
+    ignored = sorted(p.name for p in theme_dir.glob("theme*.xml")
+                     if p not in painting)
     theme_audit = {
+        "non_painting_themes_ignored": ignored,
         "slide_theme": theme_path.name,
         "other_themes": [p.name for p in others],
         "referenced_tokens": sorted(referenced),
@@ -546,6 +748,11 @@ def build_model(paths: DeckPaths,
             "slides": [], "coverage": []}
     used_images, used_videos = set(), set()
     ph_geo = build_ph_geometry(paths)
+    layout_index = build_layout_index(paths)
+    ph_text = build_ph_textstyles(paths)
+    ph_body = build_ph_bodypr(paths)
+    _masters = sorted((paths.raw / "ppt" / "slideMasters").glob("slideMaster*.xml"))
+    master_name = _masters[0].name if _masters else None
 
     kept, dropped = [], []
     for src_n, fname in enumerate(order, 1):
@@ -559,14 +766,64 @@ def build_model(paths: DeckPaths,
         rl = _rels(paths, int("".join(c for c in fname if c.isdigit())))
         layout_name = next((os.path.basename(v["target"]) for v in rl.values()
                             if v["type"] == "slideLayout"), None)
+        # Background inheritance is slide -> LAYOUT -> master. The layout link
+        # was missing and nothing had needed it: the four PowerPoint-authored
+        # decks put backgrounds on the slide or the master. This Google Slides
+        # export puts them on the layout -- slideLayout2 declares
+        # <p:bg> #A7C6ED -- so four slides rendered the master's yellow instead
+        # of the deck's blue until this walked the middle link.
+        #
+        # <a:noFill/> is an explicit "this level paints nothing", NOT "this
+        # level says nothing": layouts 3 and 4 carry it, and both correctly
+        # fall through to the master rather than being treated as a blue
+        # they never declared.
         bg_el = root.find("p:cSld/p:bg", NS)
+        bg_src = "slide"
+        if bg_el is None or bg_el.find(".//a:solidFill", NS) is None:
+            bg_src = "master"
+            _lp = (paths.raw / "ppt" / "slideLayouts" / layout_name) if layout_name else None
+            if _lp is not None and _lp.exists():
+                _lbg = etree.parse(str(_lp)).getroot().find("p:cSld/p:bg", NS)
+                if _lbg is not None:
+                    if _lbg.find("p:bgPr/a:noFill", NS) is not None:
+                        # JUDGEMENT, not spec. <a:noFill/> on a layout is read
+                        # as "this level paints NOTHING", so no ground is drawn
+                        # at all -- NOT as "say nothing, inherit the master".
+                        # ECMA-376 does not settle which it means. See the
+                        # LEARNINGS entry; do not read this as proven.
+                        bg_src = "none"
+                    elif _lbg.find(".//a:solidFill", NS) is not None:
+                        bg_el, bg_src = _lbg, "layout"
         bg_hex, bg_a = ctx.solid(bg_el.find(".//a:solidFill", NS)) if bg_el is not None else (None, None)
         bg_img = _bg_image(bg_el, rl)
         if bg_img:
             used_images.add(bg_img["src"])
 
+        # Inherited layout shapes. PowerPoint paints the layout before the
+        # slide, so these go FIRST and every slide shape stacks above them --
+        # which under rule 21 (paint order IS DOM order, no z-index) is exactly
+        # what emitting them first achieves.
+        #
+        # ALL non-placeholder layout shapes render, not only those that would
+        # sit beneath slide content. The format has no such condition: the
+        # layout renders regardless of z-position, so a "beneath content" rule
+        # would invent a constraint OOXML does not have, and it would buy
+        # nothing here (the 19 BLANK plate slides carry no layout shapes at
+        # all) while failing silently on a deck that does rely on one.
+        # Placeholders are excluded because the SLIDE supplies their content;
+        # drawing the layout's copy would double every title.
+        lay_shapes = []
+        if layout_name:
+            _lp = paths.raw / "ppt" / "slideLayouts" / layout_name
+            if _lp.exists():
+                _lr = etree.parse(str(_lp)).getroot()
+                lay_shapes = [f for f in flatten_slide(_SlideShim(_lr))
+                              if f.element.find(".//p:nvSpPr/p:nvPr/p:ph", NS) is None
+                              and f.element.find(".//p:nvPicPr/p:nvPr/p:ph", NS) is None]
+
         shapes, skipped = [], []
-        for fs in flatten_slide(_SlideShim(root)):
+        for _from_layout, fs in ([(True, f) for f in lay_shapes]
+                                 + [(False, f) for f in flatten_slide(_SlideShim(root))]):
             el = fs.element
             nv = el.find(".//p:cNvPr", NS)
             name = nv.get("name") if nv is not None else ""
@@ -585,7 +842,8 @@ def build_model(paths: DeckPaths,
                 if tbl is None:
                     skipped.append({"name": name, "kind": fs.kind, "why": "graphicFrame, not a table"})
                     continue
-                shapes.append({"type": "table", "name": name, **geo, "table": tbl})
+                shapes.append({"type": "table", "name": name, **geo, "table": tbl,
+                               "from_layout": _from_layout})
                 continue
 
             if fs.kind == "pic":
@@ -616,12 +874,20 @@ def build_model(paths: DeckPaths,
                         used_images.add(poster)
                     if svg_src:
                         used_images.add(svg_src)
+                rec["from_layout"] = _from_layout
                 shapes.append(rec)
                 continue
 
             if fs.kind == "sp":
                 tx = el.find("p:txBody", NS)
-                paras = _paras_of(ctx, tx) if tx is not None else []
+                # A placeholder with no declared run size inherits from its
+                # LAYOUT's placeholder lstStyle before the deck default.
+                _ph = el.find(".//p:nvSpPr/p:nvPr/p:ph", NS)
+                _pt = _ph.get("type") if _ph is not None else None
+                _lv = ((lambda: {i: resolve_ph_text(ph_text, layout_name, master_name, _pt, i)
+                                 for i in range(9)})()
+                       if _ph is not None else None)
+                paras = _paras_of(ctx, tx, _lv) if tx is not None else []
                 has_text = any(r["text"].strip() for p in paras for r in p["runs"])
                 sp_hex, sp_a = ctx.solid(el.find("p:spPr/a:solidFill", NS))
                 style_fill, style_font = _style_colors(ctx, el)
@@ -639,15 +905,31 @@ def build_model(paths: DeckPaths,
                 sp_pr = el.find("p:spPr", NS)
                 grad = _grad(ctx, sp_pr)
                 stroke = _stroke(ctx, sp_pr)
+                # bodyPr inherits slide -> layout placeholder -> OOXML default.
+                # The slide's own copy is often `<a:bodyPr/>`, which states
+                # nothing; the layout placeholder is where anchor, wrap and
+                # insets actually live on this deck.
+                _lb = (ph_body.get(layout_name, {}).get(_ph.get("type") or "body")
+                       if _ph is not None else None) or {}
                 if has_text:
-                    ins = {k: float(bp.get(a_, d)) / EMU_PT for k, a_, d in
-                           (("l", "lIns", 91440), ("r", "rIns", 91440),
-                            ("t", "tIns", 45720), ("b", "bIns", 45720))} if bp is not None else {}
+                    _li_ins = _lb.get("insets") or {}
+                    ins = {}
+                    for k, a_, dflt in (("l", "lIns", 91440), ("r", "rIns", 91440),
+                                        ("t", "tIns", 45720), ("b", "bIns", 45720)):
+                        if bp is not None and bp.get(a_) is not None:
+                            ins[k] = float(bp.get(a_)) / EMU_PT
+                        elif _li_ins.get(k) is not None:
+                            ins[k] = _li_ins[k]
+                        else:
+                            ins[k] = dflt / EMU_PT
                     autofit = bp is not None and bp.find("a:spAutoFit", NS) is not None
                     shapes.append({"type": "text", "name": name, **geo, "paras": paras,
+                                   "from_layout": _from_layout,
                                    "fill": sp_hex, "fill_alpha": sp_a, "insets": ins,
-                                   "anchor": bp.get("anchor") if bp is not None else None,
-                                   "wrap": bp.get("wrap", "square") if bp is not None else "square",
+                                   "anchor": ((bp.get("anchor") if bp is not None else None)
+                                              or _lb.get("anchor")),
+                                   "wrap": ((bp.get("wrap") if bp is not None else None)
+                                            or _lb.get("wrap") or "square"),
                                    "autofit": autofit, "prst": prst,
                                    "grad": grad, "stroke": stroke,
                                    "review_sticker": _is_review_sticker(
@@ -657,6 +939,7 @@ def build_model(paths: DeckPaths,
                     # NOTHING. A gradient-only wedge and a stroke-only ellipse
                     # both paint, and both were being dropped.
                     shapes.append({"type": "rect", "name": name, **geo,
+                                   "from_layout": _from_layout,
                                    "fill": sp_hex, "fill_alpha": sp_a, "prst": prst,
                                    "grad": grad, "stroke": stroke})
                 else:
@@ -677,8 +960,15 @@ def build_model(paths: DeckPaths,
                       if etree.QName(c).localname in ("sp", "pic") and _is_design_locker(c))
         deck["coverage"].append({"slide": idx, "shapes": len(shapes), "skipped": skipped,
                                  "design_lockers": lockers, "unbound_rels": unbound})
-        deck["slides"].append({"n": idx, "src_n": src_n, "file": fname, "bg": bg_hex, "bg_alpha": bg_a,
-                               "bg_image": bg_img, "shapes": shapes})
+        for _r in shapes:
+            _r.setdefault("from_layout", False)
+        _li = layout_index.get(layout_name, {})
+        deck["slides"].append({"n": idx, "src_n": src_n, "file": fname, "bg": bg_hex, "bg_alpha": bg_a, "bg_from": bg_src,
+                               "bg_image": bg_img,
+                               "layout": layout_name,
+                               "layout_name": _li.get("name"),
+                               "layout_type": _li.get("type"),
+                               "shapes": shapes})
     return deck, used_images, used_videos
 
 

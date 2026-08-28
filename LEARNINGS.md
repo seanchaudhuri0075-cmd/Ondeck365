@@ -1028,6 +1028,306 @@ Decks referenced: **Wheeber**, **FrameTag**, **Global ImAIge** (Global Image Fac
   mixed inline+relative left **1 object in the bucket and 0 rewrites**. No real
   deck, bucket or prefix was touched.
 
+## 38. An embedded font is EVIDENCE, never a shipping asset — measure it, don't serve it
+
+- **Symptom** — Deck 10 (Secret) is the first deck in the corpus to embed its
+  fonts: 6 `.fntdata` parts and a `<p:embeddedFontLst>` covering Aura AT, Bebas
+  Neue, Univers and Univers Condensed. The obvious move is to convert them to
+  woff2 and finally stop substituting. That move is wrong on three separate
+  counts, any one of which is disqualifying.
+- **Root cause** — A PPTX font embed is a *rendering* licence inside PowerPoint,
+  not a redistribution licence. Three independent blockers:
+  1. **Licence.** Univers is Linotype and Aura AT is proprietary. Serving either
+     as woff2 from a public deck is redistribution, and the deck is published on
+     a public GitHub Pages origin under a client's hostname. This is the
+     blocker that does not care how technically easy the extraction is.
+  2. **Subset.** 5 of the 6 parts carry the EOT `SUBSET` flag — they contain
+     only the glyphs the deck currently uses. The Deck Editor exists so a client
+     can edit text; the first character they type outside the subset renders as
+     `.notdef`. A shipped font that breaks on edit is worse than a substitute
+     that does not.
+  3. **Format.** All 6 are EOT v2.2 with `TTCOMPRESSED` (MicroType Express).
+     There is no decompressor to hand, so the glyph data is not readable here
+     anyway.
+- **Rule** — **Read the embedded font's HEADER for evidence; never extract,
+  convert, bundle or serve the font data.** The EOT header is uncompressed and
+  carries exactly the facts a substitution decision needs: PANOSE (proportion,
+  weight, family class), OS/2 weight, italic flag, and the authored family /
+  style / full names. That is a free, licence-clean measurement of *what the
+  face is*, which is the question rule 10 and rule 34 actually ask. Getting the
+  bytes would answer a question nobody is allowed to act on.
+  *Assertion:* no `.fntdata`/EOT payload is ever written to `render/fonts/`,
+  referenced by an `@font-face`, or committed; a deck's embedded fonts may be
+  cited in its notes as measurement evidence only.
+- **What the header settles that the autofit oracle cannot** — rule 17's oracle
+  needs `<a:spAutoFit/>` boxes, and rule 34 narrowed it further to the
+  line-COUNT test alone. Deck 10 has 4 autofit boxes and **all 4 carry
+  `wrap="none"`**, which nullifies the width test (the Old Spice condition), and
+  all 4 are Univers *Condensed* — so there is **zero** oracle surface for plain
+  Univers, the deck's dominant face at 128 slide references. The PANOSE
+  proportion byte answered in one read what the oracle could not answer at all:
+  `Univers` is **3 = Modern** (normal width) and `Univers Condensed` is
+  **6 = Condensed**. Two different width classes, stated by the file.
+- **What it still does not settle** — PANOSE gives a width *class*, not advance
+  widths. It can prove a mapping wrong; it cannot prove one right. A substitute
+  chosen on class alone is provisional in exactly the sense rule 34 means, and
+  must be labelled so.
+- **Proven by** — Deck 10 (Secret), 2026-08-27. Header parse across all 6 parts;
+  EOT v2.2, magic `0x504C`, flags `SUBSET|TTCOMPRESSED`. Recovered autofit ratio
+  **1.2135** (Univers Condensed 40pt), a sixth independent confirmation of rule
+  34's PowerPoint constant alongside 1.2121 / 1.2129 / 1.2132 / 1.2140 / 1.2143.
+
+---
+
+## 39. A Google Slides export puts grounds on the LAYOUT — walk slide → layout → master (companion to rule 38)
+
+- **Symptom** — Deck 10's first render came out yellow where the source is
+  Secret blue, on 9 of 31 slides. The five chapter dividers lost the blue panel
+  that is half their composition, and four section slides lost their background
+  outright. Every assertion passed while it happened: 22/22, including "no
+  hardcoded aspect", "live text preserved", "no z-index". Only a LibreOffice
+  ground-truth render caught it.
+- **Root cause** — Three separate links of PowerPoint's inheritance chain were
+  never implemented, because four PowerPoint-authored decks never used them.
+  This deck was exported from **Google Slides**, which places design on the
+  layout rather than on the slide or the master:
+  1. **Layout SHAPES were not rendered at all.** `slideLayout3` carries
+     `Google Shape;37;p9`, a non-placeholder rect, `#A7C6ED`, exactly
+     half-canvas by full-height — the blue panel. The builder walked slide
+     shapes only.
+  2. **Layout `<p:bg>` was not read.** The chain ran slide → master, skipping
+     the middle link. `slideLayout2` declares `<p:bg>` `#A7C6ED`; four slides
+     inherited the master's `lt1` (`#F1C232`, yellow) instead.
+  3. **Layout placeholder `<a:lstStyle>` sizes were not resolved.** The divider
+     titles carry `<a:rPr lang="en-US" dirty="0">` with no `sz`; the size lives
+     on the layout's title placeholder as `sz="7300"`. They rendered at the
+     deck default of 14pt — a 73pt display title at a fifth of its size.
+- **Rule** — Resolve background, shapes and inherited text size through
+  **slide → layout → master**, all three. Render every non-placeholder layout
+  shape, emitted BEFORE the slide's own so paint order puts them beneath
+  (rule 21: DOM order is paint order). Exclude placeholders — the slide
+  supplies their content, and drawing the layout's copy doubles every title.
+  Treat `<a:noFill/>` as "this level paints nothing", NOT as "this level says
+  nothing": it must fall through to the master rather than be read as a colour.
+  *Assertion:* pin the count of inherited layout shapes and the set of slides
+  that inherit a layout background; a deck revision that changes either fails
+  the build.
+- **Do not gate layout shapes on z-position.** "Only render layout shapes that
+  sit beneath slide content" is a condition the format does not have — the
+  layout renders regardless — and it would have bought nothing here, since the
+  19 plate slides use a BLANK layout carrying no shapes at all. A rule that is
+  inert on the deck that motivated it and silently wrong on the next one is the
+  worst of both.
+- **The origin is detectable, and worth detecting early.** Shape names like
+  `Google Shape;152`, layouts named TITLE / SECTION_HEADER / BLANK / CUSTOM_11,
+  and a theme pair of "Simple Light" (slides) + "Default" (notes). Any of the
+  three should prompt a layout-inheritance check BEFORE the first render.
+- **This is rule 38's companion.** Both are the same lesson from the same deck:
+  what a converter has never seen, it has never handled, and four decks of
+  agreement is not coverage. Rule 38 is about a font surface never exercised;
+  this is about an inheritance surface never exercised.
+- **`<a:noFill/>` on a layout means "paint nothing" — a JUDGEMENT, not a spec
+  reading.** ECMA-376 does not settle whether a layout background of `noFill`
+  is an explicit empty ground or a silence that inherits the master. Recorded
+  as a judgement so nobody later reads it as proven, the same way the Univers →
+  Archivo call is recorded. The evidence for taking it:
+  * **Ground truth across all 31 pages shows no yellow background anywhere.**
+    On the slides where the inherit-the-master reading paints yellow, GT is
+    `#FFFFFF` — s5 11.78% yellow vs GT 0.00%, s11 16.22% vs 0.17%. The 2-3% on
+    s17/s20 is product photography, not ground.
+  * **The consistency argument.** Under the inheriting reading the master's
+    `lt1` would paint on **24 of 31** slides. It appears on none.
+  * A theme whose `lt1` is `#F1C232` while all six accents are `#FFFFFF` is a
+    vestigial Google Slides export block. Under this reading it never paints,
+    which is exactly what the file renders as.
+  If a future deck contradicts this, it is this entry that is wrong, not the
+  deck — re-derive rather than special-casing.
+- **The chain is EVERY inherited property, not the three you noticed.** The
+  first fix walked slide → layout → master for background, shapes and font
+  size, and desktop review failed on three further symptoms that were all the
+  same omission: `anchor` and the four insets also live on the layout
+  placeholder (deck 10's slide-level bodyPr is literally `<a:bodyPr/>`), and
+  with 73pt type in a 68.5pt box the anchor decides whether the overflow
+  splits above and below or falls entirely into the content beneath it. Fixing
+  an inheritance chain three properties at a time costs a review round each
+  time. Walk the whole `bodyPr`.
+- **Two OOXML→CSS translations where the same word means different things:**
+  * `spcPct` is a multiple of SINGLE LINE SPACING; CSS `line-height` is a
+    multiple of FONT SIZE. Emitting `line-height:2.06` for `val="206000"`
+    advanced 9pt labels 18.5pt against a measured badge pitch of 21.86pt — a
+    full row of drift over eight rows. Multiply by the source face's
+    single-line spacing; a deck that has autofit boxes has already measured it
+    (rule 17/34). Deck 10's 1.2135 matches the 12pt divider's implied 1.2120
+    to 0.1% and runs 2.9% loose on the three 9pt dividers, which is a residual
+    worth knowing rather than fitting away.
+  * `wrap="square"` wraps at the BOX EDGE, breaking mid-word when a single
+    token does not fit — ground truth renders COLOR+TREATMENT as
+    COLOR+ / TREATM / ENT. CSS needs `overflow-wrap:anywhere`; without it the
+    token has no break opportunity and runs off the canvas.
+- **Proven by** — Deck 10 (Secret), 2026-08-27. 9 of 31 slides affected.
+  Ground-truth mean delta on the four layout-background slides fell from
+  27.20 / 50.98 / 18.86 / 20.01 to 13.44 / 10.02 / 5.37 / 4.52; the three
+  sampled plate slides were byte-unchanged, confirming the fix is scoped to
+  slides that actually inherit.
+
+---
+
+## 40. LibreOffice is not a fidelity reference for a deck whose fonts it lacks (limits rule 16)
+
+- **Symptom** — Deck 10's desktop review was argued for two rounds off
+  LibreOffice ground truth. "GT confirms the source overflows" was stated for
+  the cover and for OBJECTIVE, and a fidelity-vs-legibility decision was put to
+  the client on that basis. **All of it was wrong.** Sean's screenshots of the
+  deck in actual PowerPoint show nothing overflowing: BEAUTY sits on one line,
+  OBJECTIVE clears its body copy, VISUAL HOOKS fits its box.
+- **Root cause** — LibreOffice does not have Aura AT, Univers or Bebas Neue and
+  substitutes all three. Every comparison was therefore **one substitution
+  measured against another**, and the question under test was a substitution
+  question. The reference was structurally incapable of answering it.
+- **Rule** — Rule 16 makes a LibreOffice render a **positional/layout** sanity
+  check, and that check is only valid for text set in fonts LibreOffice
+  actually has. **Before citing GT on anything involving type — wrapping,
+  overflow, collision, line count, box fit — verify the renderer resolves the
+  same face.** If it does not, GT can still corroborate geometry (box
+  positions, fills, image placement) but says nothing about the type.
+  *Assertion:* a note citing ground truth for a typographic claim must record
+  which face the reference renderer used; if it substituted, the claim is
+  unsupported and must be re-derived.
+- **What to use instead when the reference cannot resolve the face** — the
+  deck's own geometry. Every authored string sits in an authored box at an
+  authored size, so the box gives a **width budget** in em that any candidate
+  face must satisfy. That is measured from the file, needs no reference
+  renderer, and it is what finally identified deck 10's real defect: BEAUTY
+  budgets 2.947 em and Arial needs 4.001 em, so the face resolution — not the
+  box, not the size, not "authored overflow" — was always the bug.
+- **The narrower true statement, so "nothing overflows" is not read too
+  broadly.** Some strings DO wrap in PowerPoint. PRODUCT SILOS budgets
+  **0.289 em/char**, which no cap-height face achieves, so the divider titles
+  wrap in PowerPoint too. The distinction that matters is **wrapping inside
+  their own column versus colliding with adjacent content**: the dividers do
+  the former and always did. What was wrong was the claim that the display
+  titles collide.
+- **Proven by** — Deck 10 (Secret), 2026-08-27.
+
+---
+
+## 41. Six OOXML text-layout properties that do not survive a naive CSS translation
+
+Deck 10 (Secret) surfaced six of these in one build. They are grouped because
+they share a shape: **a property the source states plainly, that the renderer
+either never reads or translates into a CSS construct with different
+semantics.** Each was invisible in code review and each produced output that
+looked deliberate.
+
+### (a) `wrap="none"` must emit `white-space:nowrap`
+
+- **Symptom** — a lone `0` floating above a divider title. Both characters were
+  in the DOM; `01` had broken into `0` / `1`.
+- **Root cause** — the shape declares `<a:bodyPr wrap="none">`, which OOXML
+  defines as *never wrap, overhang the box instead*. The renderer captured
+  `wrap` in the model and emitted nothing for it, so a **0.01pt** overflow (a
+  50.39pt box with 14.4pt of default insets = 35.99pt inner, against 36.00pt of
+  type) became a mid-token break.
+- **Rule** — emit `white-space:nowrap` for any shape whose resolved `bodyPr`
+  says `wrap="none"`. Overhang is the correct outcome there and must not be
+  suppressed. *Assertion:* count `wrap="none"` shapes in the source and assert
+  the same count of `white-space:nowrap` in the output.
+- **The symptom is VIEWPORT-DEPENDENT, which is why it hid.** At 0.01pt the
+  break sits inside sub-pixel rounding: it broke at 1280x720 and 1680x945 and
+  did not at 1440x810, 1456x834, 1512x860 or 1920x1080. Two review rounds at
+  1440/1456 never saw it. **A layout defect measured at one viewport width is
+  not a defect that has been measured.**
+
+### (b) An authored `<a:br/>` inside a paragraph must be honoured
+
+- **Symptom** — `COLOR+` and `TREATMENT` rendered as the single unbreakable
+  token `COLOR+TREATMENT`, which then either broke mid-word or overhung its
+  column by 84%.
+- **Root cause** — the runs are separated by `<a:br/>`, not by a space. The
+  MODEL captured it correctly as `br_after` (added for HenHouse, deck 8, where
+  the beef-cut names concatenated into "RibeyeStripChuck Eye..."), and
+  `model.json` carried it. Only HenHouse's renderer consumed it; **olay,
+  oldspice, venus_hestia and secret never read it.** The break opportunity was
+  authored all along and the renderer discarded it.
+- **Rule** — emit `<br>` after any run carrying `br_after`. Honour it even when
+  the run itself has no text: a break recorded against an empty run is still an
+  authored break. Now shared as `phase_1c/deckkit/markup.py::runs_html`,
+  behaviourally identical to HenHouse's inline loop so that builder can migrate
+  without moving a byte. *Assertion:* `<a:br>` count in source == `<br>` count
+  in output.
+- **Diagnostic worth keeping** — the give-away was that the DOM text had NO
+  space between the runs. A missing space suggests stripped whitespace; check
+  for `<a:br/>` before hunting a whitespace bug. Deck 10's `<a:t>` elements
+  carry no `xml:space` and no leading or trailing space at all -- there was
+  never whitespace to strip.
+
+### (c) CSS percentage padding resolves against WIDTH, never height
+
+- **Symptom** — nine badge shapes per divider reported a +5.55pt vertical
+  overhang, and the chapter numbers +8.56pt.
+- **Root cause** — vertical insets were emitted as a percentage of canvas
+  HEIGHT (`ins.t / H * 100` as `%`). Per CSS, **all four padding percentages
+  resolve against the containing block's WIDTH.** Every vertical inset was
+  therefore inflated by the deck's aspect ratio -- 720/405 = 1.778, i.e. **78%
+  too large**: an authored 7.2pt inset resolved to 12.80pt and a 3.6pt one to
+  6.40pt.
+- **Rule** — emit vertical insets in a unit that resolves against height.
+  `cqh` works and needs nothing new: the canvas already declares
+  `container-type: size` for `cqw` type sizing, so `1cqh` is 1% of canvas
+  height, which is exactly what the number already was. Horizontal stays `%`,
+  which is correct against width. *Assertion:* computed `padding-top` in the
+  browser equals the authored `tIns` in points.
+- **It manufactured two PHANTOM defects and they were mis-filed twice.** The
+  badge overhang was reported as "pre-existing and unrelated" and the chapter
+  number's as "the line box exceeding the box height". Neither was real: with
+  correct insets the badges hold 9.50pt of text in 9.54pt of inner height and
+  fit exactly, and the number's true overflow is +2.97pt, not +8.56.
+  **A measurement taken through a broken unit conversion is not evidence, and
+  calling it "pre-existing" is how it survives two rounds of review.**
+
+### (d) `lnSpc` can sit on `lvl{i}pPr` itself, not only on `defRPr` or the paragraph
+
+- **Symptom** — divider titles rendered 220pt of text in a 68.45pt box.
+- **Root cause** — `build_ph_textstyles` read `lvl{i}pPr/a:defRPr` for `sz` and
+  `latin`. Layout3's title placeholder declares **73pt AND `lnSpc spcPct
+  75000` on the same `lvl{i}pPr`** -- but `lnSpc` hangs off the `pPr`, not off
+  its `defRPr`. The size was read, the spacing was not, `model.json` held
+  `line_pct: None`, and `line-height` fell to `normal`.
+- **Rule** — when reading a placeholder level, read the `lvl{i}pPr` element
+  itself as well as its `defRPr`. A paragraph's own `lnSpc` still wins; the
+  placeholder's is the fallback, and is authored just as much.
+- **The failure mode is rule 17/34 restated.** `line-height: normal` resolves
+  to the SUBSTITUTE's natural metric. Here that was Anton at 1.5054 against an
+  authored 0.75 -- the substitute's own ratio at double the source's, which is
+  exactly what rule 34 says never to inherit.
+
+### (e) Model vertical overflow from INK EXTENT, not line-box sum
+
+- **Symptom** — honouring the authored 75% was projected to cut a title's
+  overflow from +165.7pt to +78.8pt. Measured, it went to **+122.6pt**.
+- **Root cause** — the projection summed LINE BOXES (2 x 73 x 0.9101 =
+  132.9pt). When a face's content area exceeds its line box -- Anton's 1.5054em
+  = 109.9pt inside a 66.44pt line box -- the glyphs spill ~21.7pt above and
+  below every line. Measured ink extent was 176.7pt.
+- **Rule** — for any question about overlap or collision, measure the ink
+  extent (`Range.getBoundingClientRect`). The line-box sum understates it
+  whenever `line-height` is tighter than the face's natural content area, which
+  is precisely when a deck sets tight authored spacing.
+
+### (f) KNOWN LIMITATION — placeholders are keyed by type, not `(type, idx)`
+
+`build_ph_textstyles` and `build_ph_bodypr` key on placeholder TYPE alone. A
+layout declaring several placeholders of the same type with different `idx`
+keeps only the last. Deck 10's layouts 1 and 5 each declare multiple `subTitle`
+placeholders, so four paragraphs resolve against a sibling's entry. **Not
+triggered here only because the competing entries agree** (all 80%). On a deck
+where they disagree this silently picks the wrong one. Unfixed; `resolve_ph_geometry`
+already matches on `(type, idx)` and is the model to copy.
+
+- **Proven by** — Deck 10 (Secret), 2026-08-27/28.
+
+---
+
 ## Open gaps (not yet pinned by fixtures)
 
 - `theme_from_pptx()` has no fixtures; theme *parsing* correctness is not yet locked the
@@ -1036,6 +1336,41 @@ Decks referenced: **Wheeber**, **FrameTag**, **Global ImAIge** (Global Image Fac
   Olay's two themes are byte-identical in `clrScheme`, as P&G's and SHELFBEAUTY's were.
   The Olay model asserts they agree rather than silently preferring theme1, so a deck
   where they diverge will fail loudly instead of rendering half-wrong.
+- **Deck 10's FOUR font decisions split into two kinds — do not flatten them.**
+  *Not substitutions:* Bebas Neue and Darker Grotesque are the deck's OWN faces,
+  shipping as themselves because both are SIL OFL. They arrive by INHERITANCE
+  (the runs declare no face; the master's `title` and `body` placeholders
+  declare them in their own `<a:lstStyle>`), which is why they were missed.
+  *Substitutions, all three SHAPE-BASED where WIDTH DID NOT DISCRIMINATE:*
+  Aura AT -> **Anton** (+16.2% mean slack, 7th of 17 that fit; the tightest,
+  Asap Condensed at +11.7%, is a regular-weight text face and Aura AT reads
+  near-black); Univers Condensed -> **PT Sans Narrow** (only face top-3 on both
+  constraints, exactly on the 0.900em budget); Univers -> **Roboto Condensed**
+  (width cannot choose at all here — the long strings budget 0.177-0.239
+  em/char, unachievable for mixed case, so they wrap and constrain nothing;
+  chosen on x-height 0.528 with a tighter 0.403 lc advance for the 8-9pt plate
+  labels). **The width budget is an UPPER BOUND from the box, not a target, and
+  on the display titles six faces sat within 12-15% of each other. A tie is not
+  a result.** The measurement ruled candidates out; it did not pick a winner.
+  Sean chose against his own PowerPoint screenshots.
+- **Univers -> Archivo (deck 10) is a JUDGEMENT CALL with no oracle behind it.**
+  Recorded here so nobody later reads it as proven. Deck 10 has 4 `<a:spAutoFit/>`
+  boxes, all `wrap="none"` (width test nullified, the Old Spice condition) and all
+  4 are Univers *Condensed* — so there is zero oracle surface for plain Univers,
+  the deck's dominant face at 128 slide refs. What IS measured is only that the
+  previous mapping was wrong: PANOSE proportion 3 (Modern) for Univers vs 6
+  (Condensed) for Barlow Condensed, read from the deck's own embedded font
+  headers per rule 38. Archivo was chosen on closest bundled normal-width
+  advance (H 0.732em vs Poppins 0.717, Montserrat 0.806), same class of form
+  (grotesque, not geometric — Poppins' circular bowls would read visibly
+  different at the 8pt plate labels that dominate the deck), and reuse (it
+  already carries deck 9's Helvetica Light). **Re-derive against a real Univers
+  metric source if one ever becomes available.** The broken `univers -> barlow
+  condensed` entry it replaces never fired: deck 10 is the only deck of 68
+  scanned that names plain Univers. **SUPERSEDED 2026-08-27: Archivo was
+  replaced by Roboto Condensed on shape, per the entry above. The reasoning
+  that Barlow Condensed was WRONG still stands; Archivo was never more than a
+  first guess at a replacement.**
 - Boston SemiBold -> Poppins is the one substitution in the corpus chosen on **design
   class rather than measurement** (52 characters over three short strings; every
   candidate fits with 20-30% width to spare, so the rule 17 oracle cannot discriminate).

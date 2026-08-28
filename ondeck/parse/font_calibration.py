@@ -62,13 +62,52 @@ WEB_AVAILABLE_TYPEFACES = {
 # this table, the substitution renders 1:1 with no scaling.
 #
 # Validated pairs (decks where bundle CSS confirms 1:1 rendering):
-#   univers / univers condensed / univers condensed light → Barlow Condensed (P&G)
+#   univers condensed / univers condensed light → Barlow Condensed (P&G)
+#
+# NOT every entry below is validated. Two classes live here, and the
+# difference matters: a validated pair renders 1:1 because that was MEASURED,
+# a provisional pair renders 1:1 because 1.36x cross-metric scaling would be
+# worse — a defensible default, not a proof. Provisional entries say so.
 #
 # Add new pairs as new decks are validated. The value side is
 # informational (kept for documentation); render-side font-family
 # strings are constructed elsewhere.
 MATCHED_METRIC_SUBS = {
-    "univers": "barlow condensed",
+    # Deck 10 (Secret), 2026-08-27. CORRECTED: this key read "barlow condensed"
+    # from the first version of this table, where it sat on the same line as its
+    # two condensed siblings under a "validated (P&G)" heading. It was never
+    # validated. P&G names plain Univers ZERO times — only "Univers Condensed"
+    # (8) and "Univers Condensed Light" (1) — so the entry inherited a
+    # validation belonging to a different face and mapped a NORMAL-WIDTH
+    # grotesque onto a CONDENSED substitute.
+    #
+    # Measured from deck 10's own embedded fonts (LEARNINGS rule 38 — header
+    # only, never the glyph data): PANOSE proportion is 3 = Modern for Univers
+    # and 6 = Condensed for Univers Condensed. Two width classes, stated by the
+    # file. Barlow Condensed measures usWidthClass 3 / PANOSE 6, advance H
+    # 0.472em — roughly a third narrow for 128 slide references.
+    #
+    # It never fired: deck 10 is the ONLY deck of 68 scanned that names plain
+    # Univers, so no shipped deck is affected and nothing needs re-baselining.
+    #
+    # ARCHIVO IS A JUDGEMENT CALL, NOT A MEASUREMENT. Say so out loud, because
+    # rule 34 exists precisely because a lineage argument once read as proof.
+    # There is NO oracle here: deck 10 has 4 <a:spAutoFit/> boxes, all carry
+    # wrap="none" (nullifying the width test, the Old Spice condition), and all
+    # 4 are Univers CONDENSED — zero surface for the face that matters. The
+    # grounds, in full:
+    #   * H advance 0.732em, closest of the three bundled normal-width
+    #     candidates (Poppins 0.717, Montserrat 0.806).
+    #   * Same class of form. Univers is a neutral Swiss grotesque; Archivo is
+    #     a grotesque. Poppins is geometric with circular bowls and would read
+    #     visibly different at the 8pt plate labels that dominate this deck
+    #     (87 of 132 sized runs). Montserrat at 0.806 would run 128 refs long.
+    #   * Already bundled, and already carrying deck 9's Helvetica Light at
+    #     weight 300 (phase_1c/venus_hestia/roles.py) — one family, not a
+    #     second binary.
+    # Provisional in the same sense as "boston semibold" and "gotham" below.
+    # Listed under LEARNINGS "Open gaps".
+    "univers": "archivo",
     "univers condensed": "barlow condensed",
     "univers condensed light": "barlow condensed",
     # Olay (Aug 2026). See SOURCE_LINE_HEIGHT_RATIOS / MATCHED_METRIC_AXES
