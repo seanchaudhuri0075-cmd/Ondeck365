@@ -1212,27 +1212,71 @@ Decks referenced: **Wheeber**, **FrameTag**, **Global ImAIge** (Global Image Fac
     advanced 9pt labels 18.5pt against a measured badge pitch of 21.86pt — a
     full row of drift over eight rows. Multiply by the source face's
     single-line spacing; a deck that has autofit boxes has already measured it
-    (rule 17/34). **CORRECTED 2026-08-28.** This entry recorded deck 10's
-    1.2135 as matching the 12pt divider to 0.1% and running "2.9% loose" on the
-    three 9pt dividers, and called that residual a property of the source worth
-    knowing. **Both halves were wrong.**
-    * The constant itself was mis-recovered: 1.2135 is `1.21172 + 0.07034/40`,
-      the per-box term charged to a single 40pt line (rule 17, amended). The
-      corrected value is **1.21172**, and applying it changes the 9pt label
-      pitch by only **0.033pt per row** — about **5%** of the observed drift.
-    * The "2.9% loose" figure was measured against the **authored oval pitch**
-      (21.86263pt), which is not an oracle for line spacing at all: the oval
-      offsets are a repeated integer (277655 EMU x6 with a 3-EMU blip on the
-      last gap), i.e. a fixed authored placement. PowerPoint's own line pitch at
-      9pt/206% is 22.4653pt. The 12pt column matches PowerPoint's to **+0.03%**;
-      the 9pt column is **2.68% short of it**, and no line-spacing model can
-      make both true. **The remaining 95% of the drift is authored geometry, not
-      a conversion error**, and it predicts that the badges drift against their
-      labels in PowerPoint too on slides 4/9/14 and do not on slide 21 —
-      unverified, and it contradicts a reading of Sean's screenshots.
-    * The generalisable half: **an implied factor is only evidence if the
-      quantity it is implied from is a measurement of text layout.** A
-      hand-placed decoration beside the text is not.
+    (rule 17/34). **CORRECTED TWICE, 2026-08-28. Read the second correction;
+    the first was wrong.**
+
+    *First correction.* The constant was mis-recovered: 1.2135 is
+    `1.21172 + 0.07034/40`, the per-box term charged to a single 40pt line
+    (rule 17, amended). The corrected value is **1.21172**. It stands, and it
+    is not what follows is about.
+
+    *Second correction — a PREDICTION MADE HERE AND FALSIFIED.* The first
+    correction went on to claim that the "2.9% loose" residual was authored
+    geometry, that the badge column would therefore **drift against its labels
+    in PowerPoint too** on slides 4/9/14 and not on slide 21, and it flagged
+    that as unverified. **Sean's PowerPoint screenshots of both dividers
+    falsify it by direct observation: slide 4 shows all eight badge/label pairs
+    aligned identically and slide 21 all five. There is no drift in PowerPoint
+    at either size.**
+
+    * **What broke is narrower than the constant.** 1.21172 was fitted only to
+      `spAutoFit` boxes at **`spcPct = 100%`**. The step from "per-line autofit
+      increment = 1.21172 x size" to "line advance at 206% = 2.06 x 1.21172 x
+      size" was an **untested assumption**, and it is that step the screenshots
+      break — not the constant, which slide 21 confirms. The corpus contains no
+      `spAutoFit` box at non-100% spacing outside venus_hestia's 26 wrapped
+      multi-line boxes, whose line counts are unknown, so nothing in four decks
+      of PowerPoint-produced files can settle it.
+    * **The oval pitches ARE genuine readouts after all.** The first correction
+      dismissed them as "a fixed authored placement, not an oracle". Every
+      shape on slide 4 is PowerPoint-authored — `Title 3`, `Subtitle 4`,
+      `TextBox 5`, `Picture 7`, `Oval 9`-`Oval 17`, zero `Google Shape;NNN`
+      names — so the ovals were positioned in PowerPoint against PowerPoint's
+      own rendering, and the screenshots confirm the author aligned them. The
+      pitch therefore measures PowerPoint's line advance at 206%:
+
+      | slide(s) | size | oval pitch | implied base |
+      |---|---|---|---|
+      | 4 / 9 / 14 | 9pt | 21.86263 pt | **1.179214** |
+      | 21 | 12pt | 29.96260 pt | **1.212079** |
+
+      Same face (Univers), same `spcPct` (206000), **2.79% apart**.
+    * **No current model reproduces that.** A per-face constant cannot be
+      size-dependent by construction — font metrics scale linearly. Rounding
+      cannot either: one base requires a pitch ratio of `12/9 = 1.33333`, and
+      the measured ratio is `380525/277655 = 1.370485`, **2.8% out**, orders of
+      magnitude beyond EMU rounding, and neither figure is a multiple of any
+      plausible quantum. **PowerPoint's line advance at non-100% `spcPct` is
+      size-dependent in a way nothing here explains. UNRESOLVED — do not fit a
+      mechanism to these two points.**
+    * **DO NOT adopt 1.179214.** It would improve slides 4, 9 and 14 and break
+      slide 21, which the screenshots confirm is currently correct. The
+      standing defect is therefore that **our render still drifts 0.6023pt/row,
+      4.21pt over seven rows, on slides 4/9/14 against a PowerPoint that does
+      not drift at all** — knowingly carried, because the only known
+      alternative breaks a slide that works.
+    * **Both discarded figures were computed the same way.** The original "2.9%
+      loose" and the 9pt/12pt split were both measured against the authored
+      oval pitch. That pitch is a fixed placement — a repeated integer,
+      277655 EMU x6 with a 3-EMU blip on the last gap — and it took a
+      screenshot, not the file, to establish that it nonetheless tracks
+      PowerPoint's line advance. **An implied factor is only evidence once you
+      know what the quantity it is implied from is a measurement OF**, and that
+      question is often not answerable from the file at all.
+    * **Component B is untouched and still unexplained.** The constant
+      badge-to-label offsets — **+3.90pt** on slides 4/9/14 and **+1.79pt** on
+      slide 21 — are first-line leading placement, not pitch. Nothing in either
+      correction addresses them.
   * `wrap="square"` wraps at the BOX EDGE, breaking mid-word when a single
     token does not fit — ground truth renders COLOR+TREATMENT as
     COLOR+ / TREATM / ENT. CSS needs `overflow-wrap:anywhere`; without it the
