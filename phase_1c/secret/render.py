@@ -97,8 +97,9 @@ def para_html(p, W: float) -> str:
         # 206% straight to `line-height:2.06` advanced 9pt labels by 18.5pt
         # against a badge pitch of 21.86pt -- 3.3pt short per row, a full row
         # of drift over eight. The factor is the source face's single-line
-        # spacing, and this deck measured its own: SOURCE_LINE_HEIGHT (1.2135)
-        # from its four autofit boxes.
+        # spacing: SOURCE_LINE_HEIGHT, corrected to 1.21172 on 2026-08-28
+        # (see roles.py -- the old 1.2135 charged a per-BOX constant to every
+        # line).
         bits.append(f"line-height:{p['line_pct'] * roles.SOURCE_LINE_HEIGHT:.4f}")
     style = ";".join(bits)
     # Authored <a:br/> is honoured here (deckkit.markup), not dropped. This
@@ -347,7 +348,7 @@ section.slide{{scroll-snap-align:start;scroll-snap-stop:always;
    variable is the dead-consumer smell rule 35's sibling instance records.
    Honest note on scale: this is a CORRECTNESS fix, not a fix for the title
    collisions. Barlow Condensed's natural ratio is 1.2000 against the
-   constant's 1.2135, so a 96pt title's line box moves 116.5pt -> 115.2pt.
+   constant's 1.21172, so a 96pt title's line box moves 116.5pt -> 115.0pt.
    The collisions are authored overflow and this barely touches them. */
 p.t{{margin:0;line-height:normal}}
 """

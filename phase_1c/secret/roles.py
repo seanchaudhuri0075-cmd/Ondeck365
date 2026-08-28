@@ -180,12 +180,32 @@ SUBS = {
 }
 FALLBACK_STACK = BODY_STACK
 
-# Recovered from the 4 <a:spAutoFit/> boxes (all Univers Condensed 40pt, all
-# wrap="none"). Per rule 34 this is PowerPoint's autofit constant and says
-# nothing about the face — it is the value to SET line-height to, not evidence
-# for a substitute. Sixth corpus datapoint, alongside 1.2121 / 1.2129 / 1.2132
-# / 1.2140 / 1.2143.
-SOURCE_LINE_HEIGHT = 1.2135
+# PowerPoint's autofit constant. Per rule 34 it says nothing about the face --
+# it is the value to SET line-height to, not evidence for a substitute.
+#
+# CORRECTED 2026-08-28 from 1.2135. That figure came from this deck's four
+# <a:spAutoFit/> boxes, which are the SAME shape copied onto four slides:
+# Univers Condensed 40pt, one line, no spcPct. One distinct datapoint, and
+# rule 17's single-term recovery folded a per-BOX constant into the per-LINE
+# factor. Fitting both terms across 25 autofit boxes in four decks, six sizes
+# (12-40pt) and six faces gives
+#
+#     height = 0.07034pt + 1.211720 x (lines x size x spcPct) + insets
+#
+# to a max residual of 0.00051pt. The per-line factor is 1.21172 and it is
+# independent of size AND face; the old spread of 1.2121-1.2143 across the
+# corpus was 1.21172 + 0.07034/(lines x size), i.e. the box constant charged
+# to every line. Deck 10 alone could not have caught this: with one value of
+# (lines x size) the two terms are not separable.
+#
+# HONEST EFFECT OF THIS CHANGE, so nobody expects more of it than it does:
+# it moves the divider labels by -0.033pt per row (9pt) and -0.044pt (12pt).
+# Against the badge/label drift on slides 4/9/14 that is about 5% of the
+# error. The other 95% -- 0.6027pt per row, 4.22pt over seven rows -- is the
+# gap between the AUTHORED oval pitch (21.86263pt) and PowerPoint's own line
+# pitch at 9pt/206% (22.4653pt), and is not ours to remove. Slide 21's 12pt
+# oval pitch matches PowerPoint's to +0.03%, which is why it does not drift.
+SOURCE_LINE_HEIGHT = 1.21172
 
 
 def archetype(slide: dict) -> str:

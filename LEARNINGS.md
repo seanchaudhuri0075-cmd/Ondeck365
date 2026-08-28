@@ -368,6 +368,61 @@ Decks referenced: **Wheeber**, **FrameTag**, **Global ImAIge** (Global Image Fac
 - **Amended by rule 34** — the *ratio* half of this oracle does not identify a
   face. Only the line-COUNT test does. Olay's 1.2121 was read as evidence for
   Archivo; it was not evidence of anything about the face.
+- **AMENDED 2026-08-28 — THE RECOVERY HAS TWO TERMS AND THIS FITS ONE.**
+  The equation above (`box_h = tIns + bIns + lines x ratio x size`) is missing a
+  constant. Fitted across 25 `spAutoFit` boxes in four decks, six sizes
+  (12-40pt) and six faces:
+
+      height = 0.07034 pt + 1.211720 x (lines x size x spcPct) + insets
+
+  to a max residual of **0.00051 pt**. There is a **per-BOX constant of
+  0.0703pt** alongside the per-line factor. Dividing total height by
+  `lines x size` charges that constant to every line, so what comes back is
+
+      recovered = 1.21172 + 0.07034 / (lines x size)
+
+  which **falls as boxes get bigger**. That one expression reproduces every
+  "per-deck constant" in the corpus and every entry in
+  `SOURCE_LINE_HEIGHT_RATIOS` — including the two the table's own comment
+  noticed without explaining, Aptos at 1.2161 (16pt) and 1.2132 (24pt x2),
+  *the same face at two sizes*:
+
+  | entry | recorded | lines x size | 1.21172 + 0.07034/(lines x size) |
+  |---|---|---|---|
+  | aptos @16pt x1 | 1.2161 | 16 | 1.21612 |
+  | aptos @24pt x2 | 1.2132 | 48 | 1.21319 |
+  | gotham black @60pt x1 | 1.2129 | 60 | 1.21289 |
+  | din condensed @28pt x1 | 1.2143 | 28 | 1.21423 |
+  | franklin gothic book @14pt x12 | 1.2121 | 168 | 1.21214 |
+  | univers condensed @40pt x1 (deck 10) | 1.2135 | 40 | 1.21347 |
+
+  Olay is the internally decisive case: **one face at one size (14pt) across
+  eight distinct line counts (1,2,3,4,5,6,8,12)**, whose one-term factor falls
+  monotonically 1.21671 -> 1.21214 exactly as `a + b*n` predicts.
+- **RULE — recovery needs at least TWO DISTINCT values of `lines x size`.**
+  With one value the terms are not separable and the constant silently absorbs
+  the box term. Deck 10 has exactly one: its four `spAutoFit` boxes are the same
+  shape copied onto four slides. **A sample of four identical shapes is a sample
+  of one**, and the deck could not have caught this from its own file.
+  *Assertion:* any recorded line-height ratio must carry the `lines x size` it
+  was recovered at; a bare number is not reproducible.
+- **The per-face table has no per-face component to model.**
+  `SOURCE_LINE_HEIGHT_RATIOS` keys on face, and its own comment already says
+  "five unrelated faces, one number... PowerPoint's autofit line spacing, NOT a
+  font metric". The variation it records is SIZE. Unfixed — olay, oldspice and
+  henhouse still read it — but nothing should be added to it without the
+  `lines x size` written beside the value.
+- **NOT settled: venus_hestia.** Its 353 `spAutoFit` boxes use AUTHORED insets
+  (tIns 1.0pt, bIns 0) rather than the 3.6/3.6 default, and its wrapped boxes
+  have unknown line counts, so the two terms cannot be separated there. Its
+  single-paragraph median one-term factor is **1.21247**, matching the 1.2124
+  already recorded for that deck. **The model is demonstrated on four decks, not
+  five**; venus_hestia's constant is deliberately left alone.
+- **A method trap inside the method.** The first pass at venus_hestia subtracted
+  `spcBef` from the autofit height and produced 1.19065 at 47pt, which read as a
+  deck refuting the model. PowerPoint does not charge `spcBef` on a first
+  paragraph. **A single measurement that refutes a model fitted to 0.0005pt on
+  25 boxes is more likely a bug in the measurement than a finding.**
 
 ---
 
@@ -1157,9 +1212,27 @@ Decks referenced: **Wheeber**, **FrameTag**, **Global ImAIge** (Global Image Fac
     advanced 9pt labels 18.5pt against a measured badge pitch of 21.86pt — a
     full row of drift over eight rows. Multiply by the source face's
     single-line spacing; a deck that has autofit boxes has already measured it
-    (rule 17/34). Deck 10's 1.2135 matches the 12pt divider's implied 1.2120
-    to 0.1% and runs 2.9% loose on the three 9pt dividers, which is a residual
-    worth knowing rather than fitting away.
+    (rule 17/34). **CORRECTED 2026-08-28.** This entry recorded deck 10's
+    1.2135 as matching the 12pt divider to 0.1% and running "2.9% loose" on the
+    three 9pt dividers, and called that residual a property of the source worth
+    knowing. **Both halves were wrong.**
+    * The constant itself was mis-recovered: 1.2135 is `1.21172 + 0.07034/40`,
+      the per-box term charged to a single 40pt line (rule 17, amended). The
+      corrected value is **1.21172**, and applying it changes the 9pt label
+      pitch by only **0.033pt per row** — about **5%** of the observed drift.
+    * The "2.9% loose" figure was measured against the **authored oval pitch**
+      (21.86263pt), which is not an oracle for line spacing at all: the oval
+      offsets are a repeated integer (277655 EMU x6 with a 3-EMU blip on the
+      last gap), i.e. a fixed authored placement. PowerPoint's own line pitch at
+      9pt/206% is 22.4653pt. The 12pt column matches PowerPoint's to **+0.03%**;
+      the 9pt column is **2.68% short of it**, and no line-spacing model can
+      make both true. **The remaining 95% of the drift is authored geometry, not
+      a conversion error**, and it predicts that the badges drift against their
+      labels in PowerPoint too on slides 4/9/14 and do not on slide 21 —
+      unverified, and it contradicts a reading of Sean's screenshots.
+    * The generalisable half: **an implied factor is only evidence if the
+      quantity it is implied from is a measurement of text layout.** A
+      hand-placed decoration beside the text is not.
   * `wrap="square"` wraps at the BOX EDGE, breaking mid-word when a single
     token does not fit — ground truth renders COLOR+TREATMENT as
     COLOR+ / TREATM / ENT. CSS needs `overflow-wrap:anywhere`; without it the
