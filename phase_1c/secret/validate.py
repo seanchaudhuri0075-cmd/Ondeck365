@@ -101,12 +101,16 @@ stickers = [sh for s in deck["slides"] for sh in s["shapes"] if sh.get("review_s
 check("16 review-sticker signature ran on a real domain and matched none",
       len(stickers) == 0,
       "87 shapes carry both <p:style> and text — a discriminated negative")
-# Rule 24 says PIN the occluded set, not assert it empty. It became non-empty
-# the moment inherited layout shapes started rendering, and correctly so:
-# slide 30 lays a full-bleed photo (720x450pt) over the whole canvas, burying
-# the layout's blue panel beneath it. The panel paints on the other 8 slides
-# that inherit it and paints nothing here, which is what the source shows.
-EXPECTED_OCCLUDED = {(30, "Google Shape;37;p9")}
+# Rule 24 says PIN the occluded set, not assert it empty. The pin below was
+# {(30, "Google Shape;37;p9")} and that entry was WRONG, not merely stale: the
+# "full-bleed photo burying the panel" is slide 30's Picture 2, which declares
+# <a:alphaModFix amt="12000"/> and paints at 12% opacity. It never buried
+# anything. The occlusion test read the JPEG's own alpha channel and not the
+# fill's, so a wash read as full cover and suppressed half the slide's
+# composition. With effective opacity in the test the set is empty again --
+# which is what it should have been all along. The assertion did its job: it is
+# the line that made the correction visible.
+EXPECTED_OCCLUDED = set()
 occl = {(s["n"], sh["name"]) for s in deck["slides"] for sh in s["shapes"]
         if sh.get("occluded")}
 check("17 occluded set is exactly the pinned one (rule 24)",

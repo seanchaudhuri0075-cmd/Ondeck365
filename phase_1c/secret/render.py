@@ -60,8 +60,32 @@ def run_css(r, W: float) -> str:
 def para_html(p, W: float) -> str:
     align = p.get("align")
     bits = []
-    if align in ("center", "right", "justify"):
-        bits.append(f"text-align:{align}")
+    # OOXML alignment tokens are NOT CSS keywords. This gated on
+    # ("center", "right", "justify") -- the CSS spellings -- against a model
+    # value that is always `l` / `ctr` / `r` / `just`, so nothing ever matched
+    # and `text-align` was emitted ZERO times in the whole document. 101
+    # authored `ctr` paragraphs rendered flush-left, including slide 1's
+    # BEAUTY and 99 badge letters that should sit centred in their circles.
+    # The mapping below is the same one the other four builders already use
+    # (henhouse render.py:690, olay 271, oldspice 208, venus_hestia's ALIGN);
+    # this was the one builder that wrote its own gate instead of reusing it.
+    # An unmapped token emits nothing, exactly as an absent one does.
+    css_align = {"l": "left", "ctr": "center",
+                 "r": "right", "just": "justify"}.get(align)
+    if css_align:
+        bits.append(f"text-align:{css_align}")
+    # Paragraph indents, in the SAME unit as every other canvas-relative
+    # horizontal measure here (run_css sizes in cqw): `.sh` declares no
+    # container-type, so the nearest container is `.canvas` and 1cqw is 1% of
+    # canvas width. A percentage would resolve against the SHAPE box instead,
+    # which is rule 41(c)'s trap wearing its horizontal face -- same expression,
+    # different containing block, silently wrong by the ratio between them.
+    # marL is the block indent; indent is the FIRST LINE, negative for a
+    # hanging indent, which is what CSS text-indent already means.
+    if p.get("marL"):
+        bits.append(f"padding-left:{p['marL'] / W * 100:.4f}cqw")
+    if p.get("indent"):
+        bits.append(f"text-indent:{p['indent'] / W * 100:.4f}cqw")
     # Authored line spacing wins over the deck's recovered autofit ratio.
     # Ignoring it collapsed slide 4's eight A-H labels from 206% to 121%
     # spacing, so they no longer lined up with the badges beside them and read
@@ -85,6 +109,33 @@ def para_html(p, W: float) -> str:
         spans = "<br>"
     bullet = p.get("bullet")
     battr = f' data-bullet="{esc(bullet)}"' if bullet else ""
+    if bullet:
+        # PowerPoint puts the glyph in the HANG and the text at marL. The
+        # hang is exactly -indent wide, so an inline-block of that width puts
+        # the text on marL regardless of how wide the glyph itself draws --
+        # which matters because the bullet face is substituted like any other
+        # and its advance is not the authored one.
+        #
+        # Explicitly NOT HenHouse's `p.t[data-bullet]{padding-left:1.6em;
+        # text-indent:-1.6em}`: 1.6em is a guess that happens to look right at
+        # one size, it tracks font size rather than the authored indent, and it
+        # silently disagrees with the marL/indent this same paragraph already
+        # emits. Two mechanisms for one measurement is how they drift apart.
+        bs = [f"font-family:{roles.sub_for(p.get('bullet_font'))['stack']}"]
+        b_sz = p.get("bullet_size_pt")
+        if not b_sz and p.get("bullet_size_pct"):
+            _r0 = next((r for r in p["runs"] if r.get("size_pt")), None)
+            if _r0:
+                b_sz = _r0["size_pt"] * p["bullet_size_pct"]
+        if b_sz:
+            bs.append(f"font-size:{b_sz / W * 100:.4f}cqw")
+        if p.get("bullet_color"):
+            bs.append(f"color:{p['bullet_color']}")
+        ind = p.get("indent")
+        if ind and ind < 0:
+            bs.append("display:inline-block")
+            bs.append(f"width:{-ind / W * 100:.4f}cqw")
+        spans = f'<span class="bu" style="{";".join(bs)}">{esc(bullet)}</span>' + spans
     return f'<p class="t"{battr}{f" style={chr(34)}{style}{chr(34)}" if style else ""}>{spans}</p>'
 
 
@@ -116,6 +167,11 @@ def box_style(sh, W: float, H: float) -> str:
          f"width:{sh['w'] / W * 100:.4f}%", f"height:{sh['h'] / H * 100:.4f}%"]
     if sh.get("rot"):
         s.append(f"transform:rotate({sh['rot']:.3f}deg)")
+    # Authored picture-fill alpha. Emitted on the shape wrapper rather than the
+    # <img> so a cropped picture (where the img is oversized inside .cropw)
+    # washes as one element instead of compositing the crop window separately.
+    if sh.get("opacity") is not None and sh["opacity"] < 1.0:
+        s.append(f"opacity:{sh['opacity']:.4f}")
     return ";".join(s)
 
 
@@ -135,6 +191,19 @@ def crop_img(sh, src: str, alt: str) -> str:
             f'width:{100 / vw:.4f}%;height:{100 / vh:.4f}%;'
             f'left:{-c.get("l", 0) / vw * 100:.4f}%;'
             f'top:{-c.get("t", 0) / vh * 100:.4f}%"></span>')
+
+
+# OOXML prstDash -> CSS border-style. CSS has three dash idioms against
+# OOXML's nine, so the mapping is lossy BY CONSTRUCTION: every dashed variant
+# collapses to `dashed` and every dotted one to `dotted`. Recorded as a
+# deliberate flattening rather than left implicit. `cap` and `cmpd` have no CSS
+# border equivalent at all -- they survive in model.json and nowhere else.
+DASH_CSS = {"solid": "solid",
+            "dot": "dotted", "sysDot": "dotted",
+            "dash": "dashed", "sysDash": "dashed", "lgDash": "dashed",
+            "dashDot": "dashed", "sysDashDot": "dashed",
+            "lgDashDot": "dashed", "lgDashDotDot": "dashed",
+            "sysDashDotDot": "dashed"}
 
 
 def shape_html(sh, man, W, H) -> str:
@@ -167,6 +236,29 @@ def shape_html(sh, man, W, H) -> str:
                 f'<video src="assets/{v["out"]}"'
                 f'{f" poster={chr(34)}{poster}{chr(34)}" if poster else ""}'
                 f' preload="none" muted loop playsinline></video></div>')
+
+    if t == "line":
+        # A CONNECTOR IS A STROKE, NOT A BOX. Deck 10's eight are all
+        # cx x 0 -- zero height -- so a filled div draws nothing whatever
+        # colour it is given. The mark has to be a BORDER on the zero-height
+        # element: `border-top` paints along the box's top edge, which is where
+        # the authored geometry puts the line.
+        #
+        # Weight in cqh, not pt or %: a 0.75pt rule on a 405pt-tall canvas is
+        # 0.1852% of canvas height, and cqh is the unit that resolves against
+        # height (rule 41(c) -- a percentage would resolve against WIDTH and
+        # come out 1.778x too thick, the same trap as the vertical insets).
+        st = sh.get("stroke") or {}
+        w_pt = st.get("w_pt") or 1.0
+        # PowerPoint centres a stroke on its geometric line; a CSS border-top
+        # paints downward from the edge. At 0.75pt the difference is 0.375pt --
+        # 0.67px at 1280 -- so it is recorded here rather than corrected, since
+        # a half-width offset would be a bigger lie at any larger weight.
+        bits = [box_style(sh, W, H),
+                f"border-top:{w_pt / H * 100:.4f}cqh "
+                f"{DASH_CSS.get(st.get('dash'), 'solid')} "
+                f"{rgba(st.get('hex', '#000000'), st.get('alpha'))}"]
+        return f'<div class="sh ln" style="{";".join(bits)}"></div>'
 
     if t in ("text", "rect"):
         bits = [style]
@@ -258,8 +350,6 @@ section.slide{{scroll-snap-align:start;scroll-snap-stop:always;
    constant's 1.2135, so a 96pt title's line box moves 116.5pt -> 115.2pt.
    The collisions are authored overflow and this barely touches them. */
 p.t{{margin:0;line-height:normal}}
-p.t[data-bullet]{{padding-left:1.6em;text-indent:-1.6em}}
-p.t[data-bullet]::before{{content:attr(data-bullet) " "}}
 """
 
 

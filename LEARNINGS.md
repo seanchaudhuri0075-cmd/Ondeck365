@@ -1211,13 +1211,19 @@ Decks referenced: **Wheeber**, **FrameTag**, **Global ImAIge** (Global Image Fac
 
 ---
 
-## 41. Six OOXML text-layout properties that do not survive a naive CSS translation
+## 41. OOXML properties that do not survive a naive CSS translation — and the method traps that hide them
 
-Deck 10 (Secret) surfaced six of these in one build. They are grouped because
-they share a shape: **a property the source states plainly, that the renderer
-either never reads or translates into a CSS construct with different
-semantics.** Each was invisible in code review and each produced output that
-looked deliberate.
+Deck 10 (Secret) surfaced six of these in one build (a)-(f), then ten more in a
+second (g)-(p). They are grouped because they share a shape: **a property the
+source states plainly, that the renderer either never reads or translates into
+a CSS construct with different semantics.** Each was invisible in code review
+and each produced output that looked deliberate.
+
+(a)-(f) are all text-layout properties, which is what the entry was originally
+titled for. (g)-(k) extend that to the inheritance chain those properties
+travel down; (l) is a PICTURE FILL property and is here because it fails the
+same way; (m)-(p) are the METHOD traps that let the rest survive review. The
+heading widened rather than splitting because the lesson is one lesson.
 
 ### (a) `wrap="none"` must emit `white-space:nowrap`
 
@@ -1323,6 +1329,188 @@ placeholders, so four paragraphs resolve against a sibling's entry. **Not
 triggered here only because the competing entries agree** (all 80%). On a deck
 where they disagree this silently picks the wrong one. Unfixed; `resolve_ph_geometry`
 already matches on `(type, idx)` and is the model to copy.
+
+### (g) OOXML alignment values are `l` / `ctr` / `r` / `just`, NOT CSS keywords
+
+- **Symptom** — four shapes that are centred in PowerPoint rendered flush-left.
+  It read as an inheritance failure, and an inheritance failure was indeed
+  present underneath (see (h)) -- but it was not the cause of what was on
+  screen.
+- **Root cause** — `secret/render.py` gated on the CSS spellings:
+  `if align in ("center", "right", "justify")`. The model value is always an
+  OOXML token, so nothing ever matched and **`text-align` was emitted ZERO
+  times in the entire document**. 101 paragraphs carrying `algn="ctr"` --
+  including 99 badge letters that should sit centred inside their circles --
+  rendered flush-left.
+- **Rule** — map tokens to keywords explicitly:
+  `{"l": "left", "ctr": "center", "r": "right", "just": "justify"}`.
+  Venus/Hestia's form is the one to copy because it ASSERTS on an unmapped
+  token rather than silently defaulting to `left`.
+  *Assertion:* count `algn` values in the model and assert the same count of
+  `text-align` declarations in the output. Zero of anything deck-wide is a
+  finding, not a null result.
+- **The diagnostic that matters** — a defect visible on four shapes was
+  actually firing on 101. **Before diagnosing why a property is wrong on the
+  shapes you were shown, count how many times it is emitted deck-wide.** Four
+  builders had this right; secret was the newest and the only one that wrote
+  its own gate instead of reusing the shared idiom.
+
+### (h) `algn`, `marL` and `indent` are ATTRIBUTES of `lvl{i}pPr`, not children of its `defRPr`
+
+- **Root cause** — exactly the gap that hid `lnSpc` in (d), one element over.
+  `build_ph_textstyles` descended into `a:defRPr` for `sz` and `latin` and
+  never read the element's own attributes, so levels 3-6 of the chain were
+  invisible: slideLayout2/3 declare `algn="ctr"` on their title and subTitle
+  placeholders, and the master's body placeholder declares `marL="457200"`
+  (36pt) with `indent="-317500"` (-25pt hanging).
+- **Rule** — when reading a placeholder level, read the `lvl{i}pPr` element
+  ITSELF -- its attributes and its non-`defRPr` children -- as well as its
+  `defRPr`. `defTabSz` belongs in the same read; deck 10 declares it nowhere,
+  so it is unexercised rather than handled.
+- **`indent` had no key in the model schema at all**, so even a correct walk
+  would have had nowhere to put a hanging indent. **Check that the model can
+  HOLD a property before concluding the reader is the only thing missing.**
+- **Emit `marL` as the paragraph's left indent and `indent` as the first-line
+  indent** -- `padding-left` plus a negative `text-indent`, which is what CSS
+  already means by a hanging indent.
+
+### (i) Merge guards must test `is not None`, not truthiness
+
+`resolve_ph_text` merged with `if k not in out and lv.get(k):`. For `sz` and
+`face` that is harmless. For geometry it is not: **`marL="0"` and
+`indent="0"` are meaningful RESETS** of an inherited indent, and a truthiness
+test drops them and lets the outer level win. Deck 10's slide 1 declares
+exactly that pair on its cover title against a master that says 36pt/-25pt.
+The same applies to any numeric OOXML property whose zero is a statement --
+which is most of them.
+
+### (j) Bullet properties inherit, and reading only the paragraph's own `pPr` can be right for the wrong reason
+
+- **Symptom** — none. That is the point.
+- **Root cause** — `_paras_of` read `buChar` off the paragraph's own `pPr` and
+  treated its absence as "no bullet". Deck 10 has **54 `buNone` declarations**
+  the pipeline never saw -- 42 on layout placeholders, 10 on paragraphs, 2 on
+  shape `lstStyle` -- and one `buChar` on the master's body placeholder that
+  every one of them overrides. **An unread `buNone` and an unread `buChar` both
+  come out as "no bullet", so the output was correct and the reasoning was
+  not.**
+- **What that cost** — a full round was spent on the premise that four label
+  lists were bulleted in PowerPoint, because the master's `buChar` was found
+  and `slideLayout3`'s `buNone` was not. The conclusion, the projected
+  geometry and the expected measurement were all wrong, and none of it was
+  visible in the output either before or after.
+- **Rule** — resolve `buNone` / `buChar` / `buAutoNum` through the full chain,
+  nearest level wins, and treat the KIND as one atomic choice while the other
+  bullet properties (`buFont`, `buSzPct`, **`buSzPts`**, `buClr`) merge
+  independently per-key, which is how OOXML defines them. `buNone` at any level
+  suppresses. Record the suppression rather than merely producing None: "the
+  source says no bullet" and "the source says nothing" are different facts.
+- **`buSzPts` is not `buSzPct`.** Every `buSz` in deck 10 is the absolute-points
+  form; a reader written for the percentage form alone finds nothing.
+- **Render the glyph into the HANG, not with a guessed indent.** An
+  inline-block exactly `-indent` wide puts the text on `marL` regardless of the
+  substituted face's advance. HenHouse's
+  `p.t[data-bullet]{padding-left:1.6em;text-indent:-1.6em}` is the shape to
+  avoid: 1.6em is a guess, it tracks font size rather than the authored indent,
+  and it silently disagrees with the `marL`/`indent` the same paragraph emits.
+  Two mechanisms for one measurement is how they drift apart. That rule had
+  been copied into secret as dead code and would have double-drawn the glyph.
+
+### (k) A non-placeholder shape has NO placeholder chain, so its own `lstStyle` is the only source of its text properties
+
+- **Symptom** — slide 30 renders three body paragraphs that should be
+  identical as one correct and two wrong, differing in face, size, alignment,
+  leading and indent.
+- **Root cause** — the two wrong ones are `sp` with `txBox="1"` and an empty
+  `<p:nvPr/>`. They are not placeholders, so `build_model` passes `_lv = None`
+  and no chain is consulted at all. Everything they need is in their OWN
+  shape-level `<a:lstStyle>`, which `_paras_of` was reading only for bullets.
+  **Six authored properties dropped per paragraph**: `latin` Darker Grotesque
+  Medium, `defRPr sz` 1500, `algn ctr`, `lnSpc` 80%, `marL` 457200,
+  `indent` -317500. They rendered Liberation Sans 14pt, flush left, at the
+  substitute's natural leading, with no indent -- beside a third paragraph that
+  IS a placeholder and resolved all six correctly.
+- **Rule** — precedence is paragraph `pPr` -> shape `lstStyle` -> placeholder
+  chain. **Shape `lstStyle` belongs in `_paras_of`, not in
+  `resolve_ph_text`**, because it is per-SHAPE rather than
+  per-placeholder-TYPE -- and because the case that needs it most is precisely
+  the one with no placeholder entry to hang off.
+- **Factor the level extractor, do not copy it.** Hoisting
+  `build_ph_textstyles`'s inner read into `_lvl_ent(lvl)` means the shape level
+  is read by literally the same code as the layout and master levels. A copy
+  would have drifted the first time one side gained a property.
+- **Blast radius is not a proxy for importance.** 124 of this deck's 126 shape
+  `<a:lstStyle>` elements are empty; only 2 declare anything. Two paragraphs is
+  the entire scope, and it was half the readable content of a slide.
+
+### (l) `<a:alphaModFix>` is picture-FILL opacity, and an occlusion test that ignores it deletes content
+
+- **Symptom** — slide 30's right panel rendered as a full-strength photograph
+  where the source has a faint wash over light blue, and the blue panel that is
+  half the composition was missing entirely.
+- **Root cause, first order** — `<a:alphaModFix amt="12000"/>` inside
+  `<a:blip>` is 12% opacity, in thousandths of a percent. Nothing in the
+  deckkit path read it, so the picture painted at `opacity: 1`. **`amt` is
+  OPTIONAL and its ECMA-376 default is `100000`** -- an absent `amt` means
+  fully opaque, not zero, and deck 10 has two of those alongside five real
+  washes.
+- **Root cause, second order — the part worth the entry.** `_opaque()` tested
+  a picture with `ctx.opaque_fraction(poster)`, which measures **the FILE's own
+  alpha channel**. An opaque JPEG carrying 12% fill opacity therefore read as
+  full cover, `_mark()` flagged everything beneath it occluded, and
+  `SUPPRESS_OCCLUDED_SHAPES` dropped the layout's `#A7C6ED` panel. **One unread
+  attribute deleted a shape that had nothing to do with it.**
+- **Rule** — there are two independent ways a picture fails to hide what is
+  under it, transparency in the FILE and transparency in the FILL, and an
+  occlusion test has to see both. Fold them into a single effective opacity:
+  `opaque_fraction(src) * opacity >= OPAQUE_MIN`. One rule, one threshold.
+- **When one omission produces two symptoms, fixing the omission fixes both.**
+  The missing panel was diagnosed as a separate defect and was not one.
+
+### (m) Vertical geometry in `cqh`, not percent — THIRD occurrence in one session
+
+(c) recorded this for `padding`. It recurred twice more in the same deck:
+`marL`/`indent` (horizontal, where `%` and `cqw` agree, but `cqw` is right
+because the containing block is the SHAPE and the intent is the CANVAS), and a
+connector's stroke weight (vertical, where a percentage would have been 1.778x
+too thick). **A percentage length resolves against WIDTH every time, whichever
+side it is applied to.** The canvas already declares `container-type: size`, so
+`cqw`/`cqh` cost nothing and say what is meant. Treat any percentage length in
+a renderer as suspect until its axis is checked.
+
+### (n) A sub-pixel stroke is quantised to the device-pixel grid, so a CORRECT declaration paints at a different weight per viewport
+
+Deck 10's rules are 0.75pt on a 405pt canvas -- `0.1852cqh`, exactly right.
+Measured `border-top-width`: **1.00px (0.563pt) at 1280, 1.50px (0.643pt) at
+1680, 2.00px (0.750pt) at 1920.** Only the largest lands on the authored value;
+the others are the engine snapping a hairline to a `dpr=2` half-pixel grid.
+This is (a)'s viewport-dependence lesson in a second form: **verify a weight at
+more than one size before calling it wrong, and do not "correct" a declaration
+that is already exact.**
+
+### (o) A TEST CAN ENCODE A BUG — and that is still the test doing its job
+
+`secret/validate.py` pinned `EXPECTED_OCCLUDED = {(30, "Google Shape;37;p9")}`
+with a comment explaining that a full-bleed photo buried the panel. The photo
+was the 12% wash of (l); it never buried anything. The pin recorded a defect as
+correct behaviour and passed for two rounds. **When the underlying cause was
+fixed, the pin is what failed and made the correction visible** -- which is
+exactly what rule 24 asks a pin to do. The lesson is not "do not pin"; it is
+that **a pin records what the pipeline DOES, never what the source SAYS**, so
+every pinned value needs a source citation beside it, and a pin that fails is
+a question about which side is wrong, not an instruction to update the pin.
+
+### (p) A cached page reports the previous build with complete confidence
+
+Two consecutive rounds began with a browser measurement of a STALE
+`index.html`: the served copy and the built copy diverged silently, and the
+page reported the pre-change state -- 6 elements instead of 7, `opacity: 1`
+instead of `0.12` -- with no error and no visible cue. Both were caught only by
+reading the file on disk and disbelieving the browser. **Cache-bust before
+measuring a fresh build** (`location.replace('/index.html?v=' + ...)`), and
+treat agreement between disk and browser as something to establish rather than
+assume. Same family as the polluted-history tab and the non-painting tab
+already in NOTES: the browser is a measurement instrument and it needs zeroing.
 
 - **Proven by** — Deck 10 (Secret), 2026-08-27/28.
 

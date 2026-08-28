@@ -3002,3 +3002,127 @@ overflow cannot be answered from the source.
 not resolve it against LibreOffice: per rule 40, LO lacks Aura AT, Univers and
 Bebas Neue and substitutes all three, so any comparison is one substitution
 against another.
+
+---
+
+# Deck 10 — six model-layer fixes, and what they left behind (2026-08-28)
+
+Six fixes landed in one round: the alignment keyword mapping, placeholder-level
+`algn`/`marL`/`indent` inheritance, the inherited bullet-property walk,
+`alphaModFix` picture opacity, shape-level `lstStyle` for non-placeholder text
+boxes, and `cxnSp` connector support. LEARNINGS rule 41 (g)-(p) holds the
+generalisable half. What follows is what was found and NOT fixed.
+
+## `cxnSp` fidelity gaps, accepted deliberately
+
+Two properties of a connector's `<a:ln>` have no CSS border equivalent, and
+both are carried in `model.json` and nowhere else so the gap is visible rather
+than silently dropped:
+
+* **`cap`** — CSS borders have no line-cap control at all. Deck 10's eight
+  connectors all declare `cap="flat"`, which happens to be what a CSS border
+  draws anyway, so nothing is visibly wrong here. A deck using `rnd` or `sq`
+  would not be reproducible with a border.
+* **`cmpd`** — all eight are `cmpd="sng"`. Anything beyond single (`dbl`,
+  `thickThin`, `thinThick`, `tri`) needs a different construct entirely.
+
+A third gap is geometric and was measured rather than assumed: **PowerPoint
+centres a stroke on its geometric line, while a CSS `border-top` paints
+downward from the box edge.** At the authored 0.75pt that is a **0.375pt**
+offset. Left uncorrected: a half-width nudge is a bigger lie at any heavier
+stroke, and the correct fix is to offset by half the resolved width, which
+needs the quantisation behaviour in rule 41(n) settled first.
+
+`prstDash` is flattened deliberately: CSS has three dash idioms against
+OOXML's nine, so every dashed variant maps to `dashed` and every dotted one to
+`dotted`. All eight connectors here are `solid`, so the flattening is
+unexercised.
+
+## `alphaModFix` is unread in olay, oldspice and venus_hestia
+
+**Five real washes currently render at full strength.** Census across the
+corpus, by `amt`:
+
+| deck | slides | occurrences | detail |
+|---|---|---|---|
+| olay | 34 | 2 | s1 `Picture 1` 42%, **s34** `Picture 1` 42% |
+| oldspice | 34 | 1 | s31 `Picture 3`, `amt` **absent** = 100%, a no-op |
+| venus_hestia | 65 | 3 | s1, s2, **s65** — all `Picture 4`, all 42% |
+| gap OSR5 / OSR6 / OSR7 | 30 / 34 / 41 | **0** | none in any revision |
+| secret | 31 | 7 | 5 real (42/42/22/12/42%), 2 `amt`-absent no-ops |
+
+Every affected slide is a **cover or a closing slide** — olay 1 and 34,
+venus_hestia 1, 2 and 65 — so this is the first thing a viewer sees on two
+signed-off decks. Old Spice's single occurrence needs nothing.
+
+**This is the SEVENTH defect found in one builder and live in the others**,
+after the six already tallied on 2026-08-28: mobile scroll gate, `--ar`
+consumer, crop-frame clip, `prst="ellipse"`, `br_after`, percentage padding.
+The argument for deferring the shared-primitive migration pass has now cost
+seven rediscoveries.
+
+## `cxnSp` appears in NO other deck in the corpus
+
+Measured, not assumed: olay 0, oldspice 0, venus_hestia 0, gap OSR5/6/7 0.
+Deck 10's 8 connectors (slides 1, 3, 30, 31 — two each) are the only ones.
+**Connector support is the one fix this session that is not also live debt
+elsewhere.** Worth stating because every other fix this round was.
+
+Deck 10's `coverage.skipped` is now **empty**. Before the fix it held exactly
+8 entries and all 8 were `cxnSp`/`unhandled kind` — nothing else was being
+silently dropped.
+
+## olay and oldspice have NO placeholder-`lstStyle` walk at all
+
+Both read `p:txStyles/p:otherStyle/a:lvl1pPr` and descend straight into its
+`defRPr` for inherited size, colour and typeface. Neither walks a layout's or
+master's placeholder `<a:lstStyle>`, and neither reads the `lvl{i}pPr`
+element's own attributes. For them the gap is not "attributes as well as
+children" — **the whole walk is missing.** Both also read `algn` from the
+paragraph's own `pPr` only (oldspice additionally reads `marL`); neither reads
+`indent` at any level.
+
+## henhouse and venus_hestia consume `deckkit.model` and will inherit these fixes SILENTLY
+
+Neither has a `model.py` of its own; `deckkit.model` is the only model builder
+available to them. Their `out/*/model.json` predates this session's additions
+(no `from_layout`, no `bg_from`, no `indent`), so nothing has changed yet —
+but **the next time either model is regenerated it picks up all six model-layer
+fixes at once**, on a deck that was signed off against the old behaviour.
+
+**Verify their renders before regenerating.** The likely movers are the
+placeholder `algn`/`marL`/`indent` walk and the bullet chain; `alphaModFix`
+will move venus_hestia's slides 1, 2 and 65 (correctly). This is the mirror
+image of the migration debt above: the shared primitive propagates a FIX
+without a review round, which is the same lack of control as propagating a
+defect.
+
+## Deck 10 — open, carried into the next session
+
+* **`Title 3` overflows ~123pt** (slides 4, 9, 14, 21) and **`EXECUTION`
+  overflows ~52pt** (slide 30, 144.4pt of ink in a 91.95pt box). Both are the
+  Aura AT -> **Anton** substitution: cap/em 0.8594 and natural content area
+  1.5054, against ~0.70 and ~1.2 for every other bundled face. Aura AT's real
+  metrics are unrecoverable from the PPTX (rule 38), so how much is genuine
+  authored overflow cannot be answered from the source. Unresolved pending
+  Sean's PowerPoint screenshots; not against LibreOffice (rule 40).
+* **Run-fill alpha is dropped in `_runs_of`.** The chapter numbers `01`-`04`
+  declare `<a:schemeClr val="bg2"><a:alpha val="50004"/></a:schemeClr>` — white
+  at 50.004% over the `#A7C6ED` panel, compositing to **`#D3E3F6`**, a muted
+  grey-blue. `ctx.solid()` returns the alpha correctly and `_runs_of` discards
+  it on the spot: `col, _ = ctx.solid(...)`. That underscore is the whole
+  defect. Shape fills keep their alpha (`fill_alpha`); run fills have no
+  `color_alpha` key and no path that could emit `rgba()` for text. All four
+  numbers render pure `#FFFFFF`.
+* **Badge circles are vertically misaligned against their labels** on the
+  divider slides. Spotted, **not investigated.**
+* **Images on one slide appear vertically compressed.** Spotted, **not
+  investigated** — slide not yet identified.
+* **Two boxes overrun the canvas**: s21 `Title 3`'s box right edge sits exactly
+  on the canvas edge (840.0-1680.0 at 1680 wide), and s4 `Subtitle 4`'s extends
+  **75.7px past it** (at 1280). Both predate this session's changes.
+* **PT Sans Narrow 400 is shipped against a source `b="1"`**, so the chapter
+  numbers' bold is synthesised by the browser. Measured advance is exactly
+  0.900000 em, so synthesis is not widening the glyphs and this contributes to
+  no layout defect — it is a pure fidelity gap. Fix is to bundle the real bold
+  cut.

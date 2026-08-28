@@ -178,7 +178,18 @@ def _stroke(ctx, sp_pr):
     if hexv is None:
         return None
     w = ln.get("w")
-    return {"hex": hexv, "alpha": alpha, "w_pt": (int(w) / EMU_PT) if w else 1.0}
+    out = {"hex": hexv, "alpha": alpha, "w_pt": (int(w) / EMU_PT) if w else 1.0}
+    # Dash, cap and compound are recorded even where CSS cannot express them.
+    # A border has no cap control at all and `cmpd` beyond "sng" needs a
+    # different construct entirely; carrying the authored values means the gap
+    # is visible in model.json rather than being an unrecorded silent drop.
+    d = ln.find("a:prstDash", NS)
+    if d is not None and d.get("val"):
+        out["dash"] = d.get("val")
+    for a_ in ("cap", "cmpd"):
+        if ln.get(a_):
+            out[a_] = ln.get(a_)
+    return out
 
 
 def _rot_deg(el):
@@ -251,15 +262,30 @@ _PH_FAMILY = {"ctrTitle": "title", "title": "title",
               "subTitle": "body", "body": "body"}
 
 
-def resolve_ph_text(ph_text, layout_name, master_name, ph_type, lvl):
-    """{sz, face} for a placeholder level: layout first, then master, per key."""
+def resolve_ph_text(ph_text, layout_name, master_name, ph_type, lvl,
+                    tx_defaults=None):
+    """Placeholder text properties for one level: layout first, then master,
+    then -- for bullet keys only -- the master's txStyles and the presentation
+    default. Nearest level wins, per key."""
     fam = _PH_FAMILY.get(ph_type or "body", ph_type or "body")
     out = {}
     for src, key in ((layout_name, ph_type or "body"), (master_name, fam)):
         ent = (ph_text.get(src, {}).get(key) or {})
         lv = ent.get(lvl) or ent.get(0) or {}
-        for k in ("sz", "face", "lnspc"):
-            if k not in out and lv.get(k):
+        # `is not None`, not truthiness: `marL="0"` and `indent="0"` are
+        # meaningful RESETS of an inherited indent, and a truthiness test drops
+        # them and lets the outer level win. No behaviour change for sz/face/
+        # lnspc -- build_ph_textstyles only records those when already truthy.
+        for k in ("sz", "face", "lnspc", "algn", "marL", "indent") + BULLET_KEYS:
+            if k not in out and lv.get(k) is not None:
+                out[k] = lv[k]
+    # Levels 5 and 6. `other` is the fallback family for a shape that is not a
+    # placeholder at all, which is why it is consulted last rather than never.
+    for key in (fam if fam in ("title", "body") else "other", "pres"):
+        ent = (tx_defaults or {}).get(key) or {}
+        lv = ent.get(lvl) or ent.get(0) or {}
+        for k in BULLET_KEYS:
+            if k not in out and lv.get(k) is not None:
                 out[k] = lv[k]
     return out
 
@@ -300,6 +326,132 @@ def build_ph_bodypr(paths: DeckPaths) -> dict:
                                          ("t", "tIns"), ("b", "bIns"))},
             }
         out[src.name] = per
+    return out
+
+
+# Bullet properties inherit INDEPENDENTLY of one another in OOXML: a layout may
+# state only `buFont` and still take its `buChar` from the master. So these are
+# merged per-key like `sz`/`face`, with one exception -- the KIND of bullet
+# (`buNone` / `buChar` / `buAutoNum`) is a single atomic choice, and the nearest
+# level that states any of the three settles it. That is what makes `buNone`
+# suppress: it is not an absence, it is a stated value that wins at its level.
+BULLET_KEYS = ("bu", "bufont", "buszpct", "buszpt", "buclr_el")
+
+
+def _bullet_ent(lvl) -> dict:
+    """Bullet properties off ONE pPr-shaped element (a paragraph's own `pPr` or
+    any `lvl{i}pPr`). `buClr` is kept as the ELEMENT, not a hex string: colour
+    needs the theme and the clrMap, and those live on Ctx. Resolving it here
+    would mean re-deriving the theme in a function that has no business knowing
+    about it. The dict never reaches JSON, so holding an lxml node is free."""
+    if lvl is None:
+        return {}
+    ent = {}
+    if lvl.find("a:buNone", NS) is not None:
+        ent["bu"] = ("none", None)
+    else:
+        bc, ba = lvl.find("a:buChar", NS), lvl.find("a:buAutoNum", NS)
+        if bc is not None and bc.get("char"):
+            ent["bu"] = ("char", bc.get("char"))
+        elif ba is not None:
+            ent["bu"] = ("autonum", ba.get("type") or "arabicPeriod")
+    bf = lvl.find("a:buFont", NS)
+    if bf is not None and bf.get("typeface"):
+        ent["bufont"] = bf.get("typeface")
+    bp = lvl.find("a:buSzPct", NS)
+    if bp is not None and bp.get("val"):
+        ent["buszpct"] = int(bp.get("val")) / 100000.0
+    # buSzPts is the absolute-points sibling of buSzPct and is what THIS deck
+    # actually uses -- every buSz in the package is buSzPts. Reading only the
+    # percentage form would have found nothing.
+    bt = lvl.find("a:buSzPts", NS)
+    if bt is not None and bt.get("val"):
+        ent["buszpt"] = float(bt.get("val")) / 100.0
+    bcl = lvl.find("a:buClr", NS)
+    if bcl is not None and len(bcl):
+        ent["buclr_el"] = bcl
+    return ent
+
+
+def _lvl_ent(lvl) -> dict:
+    """Every authored property on ONE `lvl{i}pPr` -- the element's own
+    attributes, its `lnSpc`, its `defRPr` and its bullet block.
+
+    Hoisted out of `build_ph_textstyles` so the SHAPE's own `<a:lstStyle>` is
+    read by literally the same code as the layout's and the master's, rather
+    than by a copy of it that drifts. A non-placeholder text box gets no
+    placeholder chain at all (`_lv` is None), so before this its `lstStyle` was
+    the only statement of its own type and geometry and it was being ignored:
+    deck 10's slide 30 has two `txBox="1"` shapes declaring 15pt Darker
+    Grotesque Medium, centred, 80% spacing, 36pt/-25pt indents, and they
+    rendered 14pt Liberation Sans flush left with no indent -- six authored
+    properties dropped per paragraph, beside a third paragraph that IS a
+    placeholder and resolved all six correctly.
+
+    `lnSpc` hangs off the `lvl{i}pPr` ITSELF, not off its `defRPr` -- which is
+    why reading only `defRPr` silently dropped it. Deck 10 declares the divider
+    titles' 73pt and their 75% line spacing on the SAME element; the size was
+    read and the spacing was not, so `line-height` fell to the substitute
+    font's own natural metric (Anton, 1.5054 -- double the authored value).
+    That is LEARNINGS rule 17/34's failure exactly.
+
+    `algn`, `marL` and `indent` are likewise ATTRIBUTES of the element, missed
+    the same way (rule 41(d)): slideLayout2/3 declare `algn="ctr"` on their
+    title and subTitle placeholders and the master's body placeholder declares
+    `marL="457200" indent="-317500"`, none of which reached the model.
+    """
+    if lvl is None:
+        return {}
+    ent = {}
+    sp_ = lvl.find("a:lnSpc/a:spcPct", NS)
+    if sp_ is not None and sp_.get("val"):
+        ent["lnspc"] = int(sp_.get("val")) / 100000.0
+    if lvl.get("algn"):
+        ent["algn"] = lvl.get("algn")
+    # EMU, like every other measurement in this module. Raw values here would
+    # be 36x too large and silently plausible.
+    for _a in ("marL", "indent"):
+        if lvl.get(_a) is not None:
+            ent[_a] = float(lvl.get(_a)) / EMU_PT
+    d = lvl.find("a:defRPr", NS)
+    if d is not None:
+        lat = d.find("a:latin", NS)
+        if d.get("sz"):
+            ent["sz"] = float(d.get("sz")) / 100.0
+        if lat is not None and lat.get("typeface"):
+            ent["face"] = lat.get("typeface")
+    ent.update(_bullet_ent(lvl))
+    return ent
+
+
+def build_txstyle_defaults(paths: DeckPaths) -> dict:
+    """Levels 5 and 6 of the chain -- the master's <p:txStyles> and the
+    presentation's <p:defaultTextStyle> -- for BULLET KEYS ONLY.
+
+    Deliberately narrower than the placeholder walk. Those two levels also
+    carry `algn`, `sz` and `defRPr` for every paragraph in the deck that states
+    none, so widening this to all keys is its own blast radius and its own
+    review; it is not a side effect to smuggle in with a bullet fix.
+    """
+    out = {}
+    mr = sorted((paths.raw / "ppt" / "slideMasters").glob("slideMaster*.xml"))
+    if mr:
+        root = etree.parse(str(mr[0])).getroot()
+        for key, tag in (("title", "titleStyle"), ("body", "bodyStyle"),
+                         ("other", "otherStyle")):
+            st = root.find(f"p:txStyles/p:{tag}", NS)
+            if st is None:
+                continue
+            out[key] = {i - 1: _bullet_ent(st.find(f"a:lvl{i}pPr", NS))
+                        for i in range(1, 10)
+                        if st.find(f"a:lvl{i}pPr", NS) is not None}
+    pres = paths.raw / "ppt" / "presentation.xml"
+    if pres.exists():
+        dts = etree.parse(str(pres)).getroot().find("p:defaultTextStyle", NS)
+        if dts is not None:
+            out["pres"] = {i - 1: _bullet_ent(dts.find(f"a:lvl{i}pPr", NS))
+                           for i in range(1, 10)
+                           if dts.find(f"a:lvl{i}pPr", NS) is not None}
     return out
 
 
@@ -344,25 +496,7 @@ def build_ph_textstyles(paths: DeckPaths) -> dict:
                 lvl = ls.find(f"a:lvl{i}pPr", NS)
                 if lvl is None:
                     continue
-                ent = {}
-                # lnSpc hangs off the lvl{i}pPr ITSELF, not off its defRPr --
-                # which is why reading only defRPr silently dropped it. Deck 10
-                # declares the divider titles' 73pt and their 75% line spacing
-                # on the SAME element; the size was read and the spacing was
-                # not, so `line-height` fell to the substitute font's own
-                # natural metric (Anton, 1.5054 -- double the authored value).
-                # That is LEARNINGS rule 17/34's failure exactly: inheriting
-                # the substitute's ratio instead of the source's.
-                sp_ = lvl.find("a:lnSpc/a:spcPct", NS)
-                if sp_ is not None and sp_.get("val"):
-                    ent["lnspc"] = int(sp_.get("val")) / 100000.0
-                d = lvl.find("a:defRPr", NS)
-                if d is not None:
-                    lat = d.find("a:latin", NS)
-                    if d.get("sz"):
-                        ent["sz"] = float(d.get("sz")) / 100.0
-                    if lat is not None and lat.get("typeface"):
-                        ent["face"] = lat.get("typeface")
+                ent = _lvl_ent(lvl)
                 if ent:
                     lvls[i - 1] = ent
             if lvls:
@@ -455,22 +589,69 @@ def _paras_of(ctx: Ctx, tx, ph_lvls=None):
     for p in tx.findall("a:p", NS):
         pPr = p.find("a:pPr", NS)
         lvl = int(pPr.get("lvl") or 0) if pPr is not None else 0
-        _e = (ph_lvls or {}).get(lvl) or (ph_lvls or {}).get(0) or {}
+        # PRECEDENCE, nearest first: the paragraph's own pPr (applied per-key
+        # below), then the SHAPE's own lstStyle, then the placeholder chain.
+        # The shape level sits here rather than in resolve_ph_text because it
+        # is per-shape, not per-placeholder-type -- and because a shape that is
+        # NOT a placeholder has no chain to sit in: `_lv` is None for it, which
+        # is exactly the case that was dropping six properties a paragraph.
+        _ph = (ph_lvls or {}).get(lvl) or (ph_lvls or {}).get(0) or {}
+        _sh = _lvl_ent(tx.find(f"a:lstStyle/a:lvl{lvl + 1}pPr", NS))
+        _e = dict(_ph)
+        _e.update({k: v for k, v in _sh.items() if v is not None})
         ph_size, ph_face = _e.get("sz"), _e.get("face")
         ph_lnspc = _e.get("lnspc")
-        bullet = None
-        if pPr is not None and pPr.find("a:buNone", NS) is None:
-            bc = pPr.find("a:buChar", NS)
-            if bc is not None:
-                bullet = bc.get("char")
+        ph_algn, ph_marL, ph_indent = (_e.get("algn"), _e.get("marL"),
+                                       _e.get("indent"))
+        # Bullets resolve through the SAME chain as algn/marL/indent, with two
+        # levels this function can see that resolve_ph_text cannot: the
+        # paragraph's own pPr, and the SHAPE's own lstStyle. Reading only the
+        # first of those (what this did) made every `buNone` at layout, master
+        # or shape level invisible -- 54 of them in deck 10 -- and reached the
+        # right answer only because an unseen `buNone` and an unseen `buChar`
+        # both come out as "no bullet" when neither is read.
+        bu_src = {}
+        for _src in (_bullet_ent(pPr), _e):
+            for _k in BULLET_KEYS:
+                if _k not in bu_src and _src.get(_k) is not None:
+                    bu_src[_k] = _src[_k]
+        bu_kind, bu_val = bu_src.get("bu", (None, None))
+        # buNone anywhere in the chain suppresses, and suppression is recorded
+        # rather than merely resulting in None -- "the source says no bullet"
+        # and "the source says nothing" are different facts about the deck.
+        bullet = bu_val if bu_kind == "char" else None
+        bu_clr = (ctx.solid(bu_src["buclr_el"])[0]
+                  if bu_src.get("buclr_el") is not None else None)
         ln = pPr.find("a:lnSpc/a:spcPct", NS) if pPr is not None else None
-        out.append({"align": pPr.get("algn") if pPr is not None else None,
+        # Same precedence as line_pct throughout: a value the PARAGRAPH states
+        # itself always wins, and the placeholder only fills a gap. Slide 4's
+        # Subtitle 4 states `algn="l"` against a layout that says `ctr`, and
+        # must stay left; slide 1's BEAUTY states marL="0" indent="0" against a
+        # master that says 36pt/-25pt, and must stay flush.
+        out.append({"align": (pPr.get("algn") if pPr is not None else None)
+                             or ph_algn,
                     "bullet": bullet,
+                    "bullet_suppressed": bu_kind == "none",
+                    # Recorded, not rendered: a numbered bullet needs a counter
+                    # per list, and no deck in the corpus declares one yet.
+                    "bullet_autonum": bu_val if bu_kind == "autonum" else None,
+                    "bullet_font": bu_src.get("bufont"),
+                    "bullet_size_pt": bu_src.get("buszpt"),
+                    "bullet_size_pct": bu_src.get("buszpct"),
+                    "bullet_color": bu_clr,
                     # own lnSpc wins; otherwise the placeholder's, which is
                     # authored just as much and was previously invisible.
                     "line_pct": (int(ln.get("val")) / 100000.0 if ln is not None
                                  else ph_lnspc),
-                    "marL": float(pPr.get("marL")) / EMU_PT if pPr is not None and pPr.get("marL") else None,
+                    "marL": (float(pPr.get("marL")) / EMU_PT
+                             if pPr is not None and pPr.get("marL") is not None
+                             else ph_marL),
+                    # New key. There was no `indent` in the model schema at
+                    # all, so a hanging indent had nowhere to land even once
+                    # the walk found one.
+                    "indent": (float(pPr.get("indent")) / EMU_PT
+                               if pPr is not None and pPr.get("indent") is not None
+                               else ph_indent),
                     "runs": _runs_of(ctx, p, ph_size, ph_face)})
     return out
 
@@ -544,7 +725,17 @@ def _opaque(ctx: Ctx, s):
         return bool(s.get("fill")) and (s.get("fill_alpha") is None or s["fill_alpha"] >= 1.0)
     if s["type"] in ("image", "video"):
         src = s.get("poster")
-        return bool(src) and ctx.opaque_fraction(src) >= OPAQUE_MIN
+        # Two independent ways a picture can fail to hide what is under it, and
+        # the occlusion test has to see both: transparency baked into the FILE
+        # (opaque_fraction, an alpha-channel measurement) and transparency
+        # applied to the FILL (alphaModFix). Reading only the first made deck
+        # 10's slide 30 report an opaque JPEG at 12% opacity as full cover, so
+        # everything beneath it -- including layout3's #A7C6ED panel, half the
+        # slide's composition -- was flagged occluded and dropped. Effective
+        # opacity is the product; one rule, one threshold.
+        eff = s.get("opacity")
+        return (bool(src) and ctx.opaque_fraction(src)
+                * (1.0 if eff is None else eff) >= OPAQUE_MIN)
     return False
 
 
@@ -750,6 +941,8 @@ def build_model(paths: DeckPaths,
     ph_geo = build_ph_geometry(paths)
     layout_index = build_layout_index(paths)
     ph_text = build_ph_textstyles(paths)
+    # Levels 5 and 6, bullet keys only -- see build_txstyle_defaults.
+    tx_defaults = build_txstyle_defaults(paths)
     ph_body = build_ph_bodypr(paths)
     _masters = sorted((paths.raw / "ppt" / "slideMasters").glob("slideMaster*.xml"))
     master_name = _masters[0].name if _masters else None
@@ -837,6 +1030,29 @@ def build_model(paths: DeckPaths,
                 geo["geom_from"] = "layout"
             geo["rot"] = _rot_deg(el)
 
+            if fs.kind == "cxnSp":
+                # A CONNECTOR IS A STROKE, NOT A BOX. Both of deck 10's rules
+                # are cx=624000 by cy=0 with <a:noFill/>: the entire visible
+                # mark is the <a:ln>, so a shape with no line is genuinely
+                # nothing and is skipped for that reason rather than for its
+                # kind. Falling to the unhandled-kind branch silently dropped
+                # all 8 in this deck, including the two that bracket slide 30's
+                # EXECUTION headline above and below.
+                _st = _stroke(ctx, el.find("p:spPr", NS))
+                if _st is None:
+                    skipped.append({"name": name, "kind": fs.kind,
+                                    "why": "connector with no line"})
+                    continue
+                _pg = el.find("p:spPr/a:prstGeom", NS)
+                _xf = el.find("p:spPr/a:xfrm", NS)
+                shapes.append({"type": "line", "name": name, **geo,
+                               "prst": _pg.get("prst") if _pg is not None else None,
+                               "stroke": _st,
+                               "flip_h": (_xf is not None and _xf.get("flipH") == "1"),
+                               "flip_v": (_xf is not None and _xf.get("flipV") == "1"),
+                               "from_layout": _from_layout})
+                continue
+
             if fs.kind == "graphicFrame":
                 tbl = _table(ctx, el)
                 if tbl is None:
@@ -856,6 +1072,16 @@ def build_model(paths: DeckPaths,
                 svg_src = os.path.basename(rl.get(svg_emb, {}).get("target")) if svg_emb else None
                 rec = {"type": "video" if vid is not None else "image", "name": name,
                        **geo, "crop": _srcrect(el), "poster": poster, "svg": svg_src}
+                # <a:alphaModFix> is a PICTURE-FILL effect: it scales the whole
+                # blip's alpha, and it is the only mechanism this corpus uses to
+                # wash a photograph back. `amt` is in thousandths of a percent,
+                # so 12000 is 12% opacity; the attribute is OPTIONAL and its
+                # default is 100000, which is why an absent `amt` must read as
+                # fully opaque rather than as zero.
+                _am = blip.find("a:alphaModFix", NS) if blip is not None else None
+                if _am is not None:
+                    rec["opacity"] = (int(_am.get("amt")) / 100000.0
+                                      if _am.get("amt") else 1.0)
                 if vid is not None:
                     tgt = (rl.get(vid.get(R + "link"), {}).get("target")
                            or rl.get(vid.get(R + "embed"), {}).get("target"))
@@ -884,7 +1110,8 @@ def build_model(paths: DeckPaths,
                 # LAYOUT's placeholder lstStyle before the deck default.
                 _ph = el.find(".//p:nvSpPr/p:nvPr/p:ph", NS)
                 _pt = _ph.get("type") if _ph is not None else None
-                _lv = ((lambda: {i: resolve_ph_text(ph_text, layout_name, master_name, _pt, i)
+                _lv = ((lambda: {i: resolve_ph_text(ph_text, layout_name, master_name, _pt, i,
+                                                 tx_defaults)
                                  for i in range(9)})()
                        if _ph is not None else None)
                 paras = _paras_of(ctx, tx, _lv) if tx is not None else []
