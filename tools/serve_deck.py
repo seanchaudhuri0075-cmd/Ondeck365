@@ -75,6 +75,7 @@ class RangeHandler(SimpleHTTPRequestHandler):
 if __name__ == "__main__":
     root = os.path.abspath(sys.argv[1])
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 8912
+    host = sys.argv[3] if len(sys.argv) > 3 else "127.0.0.1"
     h = lambda *a, **k: RangeHandler(*a, directory=root, **k)
-    print(f"serving {root} on http://127.0.0.1:{port}/  (Range: 206 supported)")
-    HTTPServer(("127.0.0.1", port), h).serve_forever()
+    print(f"serving {root} on http://{host}:{port}/  (Range: 206 supported)")
+    HTTPServer((host, port), h).serve_forever()
