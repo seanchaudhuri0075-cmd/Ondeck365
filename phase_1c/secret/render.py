@@ -385,12 +385,50 @@ p.t{{margin:0;line-height:normal}}
    belongs inside the MOBILE_BP block. A deck-local breakpoint would
    leave deck 10 on desktop across {band}px while every sibling reflowed.
 
-   Slide 1 only, so far. Everything is scoped to #s1; slides 2-31 keep
-   their desktop canvas untouched below the breakpoint until each is
+   Slides 1 and 2 so far. Everything is scoped to #s1 / #s2; slides 3-31
+   keep their desktop canvas untouched below the breakpoint until each is
    done in its own pass.
    ================================================================== */
 @media (max-width:{bp}px){{
 {scroll_release}
+
+  /* ==================================================================
+     DECK-WIDE READING SIZE -- a target X-HEIGHT, not a target px.
+     This is the vertical twin of --head-fs's inversion: there, a type size
+     was derived from the width the word had to occupy, because rendered
+     width is size times the face's SET WIDTH and that second factor is not
+     ours. The same is true of reading size. **A px size is not a reading
+     size.** Perceived size is x-height, and the two faces carrying body
+     copy in this deck differ by 31% on it -- measured from the deck's own
+     embedded fonts, OS/2 sxHeight over unitsPerEm:
+
+         Darker Grotesque  0.4040   <- slide 2's subtitle
+         Roboto Condensed  0.5283   <- slides 3, 4, 9, 14, 21 and the rest
+         Liberation Sans   0.5283   (Helvetica/Arial metrics, for reference)
+
+     Slide 2's body under the old `clamp(14px,4vw,18px)` computed 15.6px at
+     390, which in Darker Grotesque is 6.30px of x-height -- the reading
+     size of 11.9px Helvetica. That is the reported defect, and no px ramp
+     could have fixed it for both faces at once: the same px number reads
+     31% smaller in Darker Grotesque than in Roboto Condensed.
+
+     --read-x belongs to the DECK. Each face divides it by its own ratio,
+     so two shapes in two faces at two different px sizes read the SAME.
+     8.89px at 390 is the x-height of 16.8px Helvetica, i.e. a hair under
+     the iOS default body size.
+
+     DECLARED HERE, CONSUMED PER SLIDE. Slides 3-31 have not had their
+     reflow pass yet: below the breakpoint they still show the authored
+     16:9 canvas letterboxed to 390x219, where the authored cqw sizes are
+     correct FOR THAT CANVAS and this token is roughly 2.5-3.3x too large
+     to fit their boxes. A custom property paints nothing until something
+     reads it, so this is inert on every slide but slide 2 -- and it is the
+     value each of those slides should adopt AS IT IS REFLOWED, not before.
+     ================================================================== */
+  .canvas{{
+    --read-x:clamp(8.0px,2.28vw,9.6px);
+    --x-darker-grotesque:0.4040;
+    --x-roboto-condensed:0.5283}}
 
   /* ---- the panel: full height, no letterbox ----
      Desktop fits the canvas to the authored aspect, which on a phone
@@ -541,6 +579,137 @@ p.t{{margin:0;line-height:normal}}
     left:auto!important;right:calc(50% + var(--kv-gap))!important}}
   #s1 [data-name="Google Shape;135;p29"]{{
     left:calc(50% + var(--kv-gap))!important;right:auto!important}}
+
+  /* ==================================================================
+     SLIDE 2 -- SECTION_HEADER: composited hero, headline, body.
+     Same rules as slide 1: scoped to the slide, media stays positioned,
+     no wrapper, no mobile-only duplicate of any img.
+     ================================================================== */
+  #s2.slide{{align-items:stretch;min-height:100svh}}
+  #s2 .canvas{{width:100%;height:100svh;aspect-ratio:auto;
+    --edge:clamp(14px,4.5vw,26px);
+    /* ONE column, shared by headline and body, so their centres and their
+       measure agree without either knowing about the other. Capped so the
+       headline does not run away at the top of the range. */
+    --col:min(calc(100vw - 2 * var(--edge)),460px);
+    /* Hero height DERIVED from the authored aspect (722.36 x 246.62pt)
+       rather than typed, so the stack under it stays correct if the asset
+       is ever re-exported at a different size. */
+    --hero-h:calc(100vw * 246.62070866141732 / 722.3566929133858);
+
+    /* THE HEADLINE IS DERIVED FROM ITS COLUMN, not from a vw ramp -- the
+       slide 1 construction, applied here because rule 41(r) says to do it
+       BEFORE the break appears. Advance width of "OBJECTIVE" per 1px of
+       font-size, read from this deck's own embedded faces: Anton 3.8198,
+       Roboto Condensed 4.5225 (+18.4%), Liberation Sans i.e. Helvetica and
+       Arial metrics 5.5566 (+45.5%). A ramp tuned on Anton overflows the
+       column by 45% the moment the deck falls back to the system stack, so
+       the size is computed from the width we want the word to OCCUPY.
+       Rendered width is --head-fit x --col at every viewport by
+       construction. (Cross-check: the same measurement reproduces slide
+       1's published BEAUTY numbers -- Bebas 2.328, Roboto Condensed 3.227,
+       Helvetica 4.001 -- so the ratios are on the same footing.) */
+    --head-ratio:3.8198;
+    --head-fit:0.82;
+    --head-fs:calc(var(--col) * var(--head-fit) / var(--head-ratio));
+    /* The authored line-height, restated as a property so the line box and
+       the --head-h that predicts it below cannot drift apart. */
+    --head-lh:0.9694;
+    --head-h:calc(var(--head-fs) * var(--head-lh));
+    /* Body copy is sized from the DECK-WIDE reading size, not from a px
+       ramp of its own -- see the --read-x block above the slide 1 rules.
+       Darker Grotesque is this shape's face, so it divides by that face's
+       own x-height ratio: at 390 the token is 8.89px of x-height, which is
+       22.01px of Darker Grotesque. */
+    --body-fs:calc(var(--read-x) / var(--x-darker-grotesque));
+
+    /* THE HEADLINE-TO-BODY GAP IS STATED, NOT INHERITED. The desktop boxes
+       OVERLAP: Title 1 ends at 350.92pt, Subtitle 2 starts at 336.03pt --
+       14.90pt of box overlap -- and the ink overlaps too, because Anton at
+       96pt sets a 93.06pt line box inside a 77.55pt inner height and the
+       centred anchor spills it 7.75pt past each edge. Inheriting that stack
+       on a phone would inherit the collision. Desktop is NOT touched: this
+       is inside the breakpoint and the authored overlap stays authored. */
+    --hero-gap:clamp(20px,6vw,36px);
+    --head-gap:clamp(12px,3.6vw,22px);
+    /* Where the headline starts. `max()` is the guard, not decoration: the
+       46% keeps the pair optically placed on a tall phone instead of
+       stranded under the hero, and the hero-derived term wins on a short or
+       wide viewport, where 46% would put the headline INSIDE the image. The
+       elastic dimension is therefore the air between hero and headline --
+       the same choice slide 1 makes between its lockup and KEY VISUALS. */
+    --stack-top:max(calc(var(--hero-h) + var(--hero-gap)),46%)}}
+
+  /* ---- the wash: edge to edge ----
+     Authored as a 100% x 80.31% rect at 179.994deg. Unlike slide 1's, this
+     rotation is NOT a rounding artefact of zero -- it is 180deg, and it is
+     LOAD-BEARING: the inline gradient puts its blue stop at 0deg, i.e. at
+     the top of the element, so the rotation is the only thing placing the
+     wash at the BOTTOM of the slide. Dropping it, as slide 1 drops its
+     359.994deg, would flip the gradient end for end. Normalised to a flat
+     180deg -- a half turn maps a full-bleed rect onto itself, so there is
+     nothing left to shear -- and kept. */
+  #s2 [data-name="Google Shape;16;p3"]{{
+    left:0!important;top:0!important;right:0!important;bottom:0!important;
+    width:100%!important;height:100%!important;
+    transform:rotate(180deg)!important}}
+
+  /* ---- hero: full bleed at the top ----
+     ONE asset. The three product panels are composited INSIDE it, so there
+     is nothing to split without cutting new files, which rule 31 forbids.
+     Sized by `aspect-ratio` rather than by --hero-h so the box matches the
+     image exactly and the deck-wide `object-fit:cover` has nothing to trim
+     -- a height that missed by a pixel would crop the outer two panels,
+     which is the one failure this slide cannot afford. It stays POSITIONED,
+     like every other media element here. */
+  #s2 [data-name="Picture 4"]{{
+    left:0!important;right:0!important;top:0!important;bottom:auto!important;
+    width:100%!important;height:auto!important;
+    aspect-ratio:722.3566929133858/246.62070866141732}}
+
+  /* ---- headline: below the hero, one line, derived size ---- */
+  #s2 [data-name="Title 1"]{{
+    left:50%!important;right:auto!important;
+    top:var(--stack-top)!important;bottom:auto!important;
+    width:var(--col)!important;height:auto!important;
+    padding:0!important;transform:translateX(-50%)!important}}
+  /* RULE 41(r), APPLIED BEFORE IT BITES. build_css sets
+     `.sh.tx{{overflow-wrap:anywhere}}` deck-wide -- correct for the authored
+     wrap="square" body copy, hazardous here: OBJECTIVE is one word, and a
+     1px overflow would come back as OBJECT / IVE, which reads as
+     typesetting rather than as a bug. `nowrap` removes every break
+     opportunity at any width; `overflow-wrap:normal` stops the two
+     declarations disagreeing. --head-fs above is what keeps it from
+     NEEDING to overflow; this is the guarantee that it cannot split if it
+     ever does. Declared on the shape, which is what carries `anywhere`. */
+  #s2 [data-name="Title 1"]{{
+    white-space:nowrap!important;overflow-wrap:normal!important}}
+  #s2 [data-name="Title 1"] p.t{{line-height:var(--head-lh)!important}}
+  #s2 [data-name="Title 1"] p.t span{{font-size:var(--head-fs)!important}}
+
+  /* ---- body: below the headline ----
+     ALIGNMENT IS ALREADY CORRECT AND IS DELIBERATELY NOT RESTATED. The
+     paragraph resolves to algn="ctr" -- through the layout's subTitle
+     placeholder, since slide2.xml states no algn of its own -- and
+     para_html emits `text-align:center` INLINE on p.t, so the body is
+     centred on both breakpoints already. `algn="just"` appears nowhere in
+     the source deck. Writing a centring override here would be a rule that
+     restates the value it is given, and the next reader would have to
+     disprove it before touching anything.
+     The hanging indent DOES go: marL 36pt / indent -25pt with
+     `bullet_suppressed` true and `bullet` None is a marker indent with no
+     marker, and on a centred paragraph it pushes the block right while
+     pulling line 1 left, which reads as a centring bug. Leading is left
+     exactly as authored (rule 14). */
+  #s2 [data-name="Subtitle 2"]{{
+    left:50%!important;right:auto!important;
+    top:calc(var(--stack-top) + var(--head-h) + var(--head-gap))!important;
+    bottom:auto!important;
+    width:var(--col)!important;height:auto!important;
+    padding:0!important;transform:translateX(-50%)!important}}
+  #s2 [data-name="Subtitle 2"] p.t{{
+    padding-left:0!important;text-indent:0!important}}
+  #s2 [data-name="Subtitle 2"] p.t span{{font-size:var(--body-fs)!important}}
 }}
 """
 
