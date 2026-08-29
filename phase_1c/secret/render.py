@@ -328,8 +328,138 @@ def shape_html(sh, man, W, H) -> str:
     return ""
 
 
+# Group A: BLANK-layout photo plates. Nine slides, one code path -- the block
+# below is GENERATED from the model rather than hand-written per slide, which
+# is what makes the group pass repeatable and keeps nine slides from drifting
+# apart. Slide 13 was built by hand first and is now emitted from here; its
+# measured numbers are unchanged, which is the regression check on the
+# generator itself.
+# Every slide whose content is media. Group A's nine plus the media splits
+# (5-8, 11, 15, 18-20, 24) and the two video slides (28, 29).
+PLATE_SLIDES = (5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20,
+                22, 23, 24, 25, 26, 28, 29)
+
+# The separator between slides, in the deck's OWN white. Measured, not chosen:
+# every inset plate slide carries an authored white margin around its media,
+# and the modal value is 10.14pt top and bottom (6 of 14 slides; the spread is
+# 9.54-10.25pt). Two consecutive slides therefore show 10.14 + 10.14 = 20.28pt
+# of white between them on the authored canvas, which against the 720pt width
+# the plates are now sized by is 2.8167% -- 11.0px at 390, 12.1px at 430.
+# The white is #FFFFFF, which is what `--bg` already resolves to on every
+# BLANK-layout plate slide. Nothing here is invented: the band is the gap the
+# deck already puts between two slides, carried across to a full-bleed stack.
+BAND_VW = 20.28 / 720 * 100
+
+
+def plate_css(sl, W: float) -> str:
+    """Each image becomes its own full-bleed plate; badges travel with theirs."""
+    n = sl["n"]
+    ims = [sh for sh in sl["shapes"] if sh["type"] in ("image", "video")]
+    # Badges only. A `rect` or `line` is not a badge: slides 28 and 29 carry
+    # the deck's full-width gradient wash as a rect, and treating it as one
+    # would size a 720pt background to 24px and park it over a video.
+    tx = [sh for sh in sl["shapes"] if sh["type"] == "text"]
+    bg = [sh for sh in sl["shapes"] if sh["type"] in ("rect", "line")]
+    if not ims:
+        return ""
+    out = [f"  #s{n}.slide{{align-items:stretch;min-height:0;"
+           f"justify-content:flex-start;"
+           # The band rides on the slide, so it appears BETWEEN slides and
+           # never between plates inside one -- the run stays continuous,
+           # which is what makes a multi-plate slide read as one scroll.
+           f"border-bottom:{BAND_VW:.4f}vw solid #FFFFFF}}",
+           f"  #s{n} .canvas{{",
+           "    --plate:100vw;",
+           "    --badge:clamp(20px,6.2vw,28px);"]
+    # DOM order is authored z order and is kept: no `order` is emitted anywhere,
+    # per rule 41(v) -- on this deck it would re-rank the images past the
+    # absolutely positioned badges and paint over them.
+    cum = "0px"
+    tops = []
+    gaps = {}          # 1-based index k -> gap in vw BEFORE plate k+1
+    for k, im in enumerate(ims, 1):
+        ar = im["w"] / im["h"]
+        out.append(f"    --ar{k}:{ar:.4f};")
+        out.append(f"    --h{k}:calc(var(--plate) / var(--ar{k}));")
+        out.append(f"    --top{k}:{cum};")
+        tops.append(k)
+        if k < len(ims):
+            nxt = ims[k]
+            # Authored VERTICAL gap only. Side-by-side images have none: their
+            # horizontal gutter does not survive being stacked, and inventing a
+            # vertical one would be inventing a gap the file does not have.
+            gap = max(0.0, nxt["y"] - (im["y"] + im["h"]))
+            # vw, NOT vh. The plates are sized by 100vw and every height on
+            # them derives from that width through the authored aspect, so a
+            # canvas-relative vertical distance has to travel in the same
+            # unit. Written as vh it is measured against a viewport height the
+            # plate stack has nothing to do with -- and since these slides set
+            # min-height:0, there is no canvas height for it to mean anything
+            # against either. Caught by a probe frame sized to the whole deck:
+            # 2.6182vh became 776px instead of 22px and threw slide 5's fourth
+            # badge clean off the slide. Same family as rule 41(m).
+            gvw = gap / W * 100
+            if gvw > 0.001:
+                gaps[k] = gvw
+            cum = (f"calc(var(--top{k}) + var(--h{k}))" if gap <= 0.01 else
+                   f"calc(var(--top{k}) + var(--h{k}) + {gvw:.4f}vw)")
+    out.append("    container-type:inline-size;")
+    out.append("    width:100%;height:auto;min-height:0;aspect-ratio:auto;")
+    out.append("    display:flex;flex-direction:column;align-items:stretch;")
+    out.append("    padding:0}")
+    # position:relative, never static -- rule 41(u): `.cropw` is
+    # absolute;inset:0 and needs this shape to stay its containing block.
+    # The wash rect behind the videos on 28/29 has no job once each video is
+    # its own full-bleed plate: it is a background for a composed spread, and
+    # there is no spread left. It is a rect, not an image, so nothing in the
+    # editor's index-addressed image list moves when it goes.
+    for b in bg:
+        out.append(f'  #s{n} [data-name="{esc(b["name"])}"]{{display:none!important}}')
+    out.append(f"  #s{n} .sh.im,#s{n} .sh.vid{{position:relative!important;"
+               "inset:auto!important;")
+    out.append("    left:auto!important;top:auto!important;")
+    out.append("    width:100%!important;height:auto!important;")
+    out.append("    transform:none!important;flex:0 0 auto}")
+    for k, im in enumerate(ims, 1):
+        # The authored gap becomes a real gap between the plates, not merely a
+        # term in the badge's coordinate chain: if it only shifted the badge,
+        # the badge would sit where no plate is. Plates with no authored gap
+        # get none -- a run inside one slide stays continuous.
+        mt = f";margin-top:{gaps[k - 1]:.4f}vw" if (k - 1) in gaps else ""
+        out.append(f'  #s{n} [data-name="{esc(im["name"])}"]'
+                   f"{{aspect-ratio:var(--ar{k}){mt}}}")
+    if tx:
+        out.append(f"  #s{n} .sh.tx{{width:var(--badge)!important;"
+                   "height:var(--badge)!important;")
+        out.append("    padding:0!important;right:auto!important;"
+                   "bottom:auto!important}")
+    for b in tx:
+        cx, cy = b["x"] + b["w"] / 2, b["y"] + b["h"] / 2
+        host, hk = None, None
+        # The badge's host is the TOPMOST image containing its centre -- on a
+        # slide whose images overlap (26) that is the one it visually sits on.
+        for k, im in enumerate(ims, 1):
+            if im["x"] <= cx <= im["x"] + im["w"] and im["y"] <= cy <= im["y"] + im["h"]:
+                host, hk = im, k
+        if host is None:                       # nearest by centre distance
+            hk, host = min(enumerate(ims, 1),
+                           key=lambda t: abs(cx - (t[1]["x"] + t[1]["w"] / 2)))
+        rx = (cx - host["x"]) / host["w"]
+        ry = (cy - host["y"]) / host["h"]
+        out.append(f'  #s{n} [data-name="{esc(b["name"])}"]{{')
+        out.append(f"    left:calc({rx:.4f} * var(--plate) - var(--badge) / 2)!important;")
+        out.append(f"    top:calc(var(--top{hk}) + {ry:.4f} * var(--h{hk})"
+                   " - var(--badge) / 2)!important}")
+    if tx:
+        out.append(f"  #s{n} .sh.tx p.t span"
+                   "{font-size:calc(var(--badge) * 0.44)!important}")
+    return "\n".join(out)
+
+
 def build_css(deck) -> str:
     W, H = deck["w_pt"], deck["h_pt"]
+    plate_blocks = "\n\n".join(
+        plate_css(sl, W) for sl in deck["slides"] if sl["n"] in PLATE_SLIDES)
     bp = dkcss.MOBILE_BP
     band = f"769-{bp}"
     scroll_release = dkcss.mobile_scroll_release("section.slide")
@@ -1026,7 +1156,10 @@ p.t{{margin:0;line-height:normal}}
   #s3 [data-name="Google Shape;159;p31"] p.t span{{font-size:var(--desc-fs)!important}}
 
   /* ==================================================================
-     SLIDE 13 -- GROUP A pattern: EACH IMAGE IS ITS OWN FULL-BLEED PLATE.
+     GROUP A -- EACH IMAGE IS ITS OWN FULL-BLEED PLATE.
+     Ten slides' worth of rules below this comment are GENERATED by
+     plate_css() from the model, one code path for all nine, so they
+     cannot drift apart slide by slide.
      Group A (10, 12, 13, 16, 17, 22, 23, 25, 26) is BLANK-layout with no
      title, no description and no prose: one to three photographs plus Oval
      badges carrying a single letter. Slide 3's shape does not transfer --
@@ -1061,74 +1194,170 @@ p.t{{margin:0;line-height:normal}}
      `scroll-snap-align:start` stays on the section and is inert without a
      snap container, exactly as mobile_scroll_release documents.
      ================================================================== */
-  #s13.slide{{align-items:stretch;min-height:0;justify-content:flex-start}}
-  #s13 .canvas{{
-    /* Every plate is the full viewport width; no edge, no column, no inset.
-       The authored 1.60% left and 2.53% top insets go with the bleed. */
-    --plate:100vw;
-    --badge:clamp(20px,6.2vw,28px);
-    /* authored aspects: 460.82x384.61 and 224.86x384.82 */
-    --ar1:1.1982;
-    --ar2:0.5843;
-    --h1:calc(var(--plate) / var(--ar1));
-    --h2:calc(var(--plate) / var(--ar2));
-    /* NO GAP. The authored file has none to carry: the two images are side by
-       side at the SAME y (10.25..394.86 and 10.03..394.86), so their 11.07pt
-       separation is a horizontal gutter and does not survive being stacked.
-       A vertical gap here would be invented, so --top2 is just --h1. */
-    --top1:0px;
-    --top2:var(--h1);
+{plate_blocks}
+
+  /* ==================================================================
+     SLIDE 9 -- GROUP B (4, 9, 14, 21): photo band, text on the blue.
+     Slide 3's ethos, not its layout. The photograph takes a full-bleed band
+     at its OWN authored aspect (0.9260, the authored 52.09% x 100% box), so
+     unlike slide 3 there is no cover-crop and rule 41(t) never arises -- the
+     whole frame shows. Everything else sits below it on the authored blue.
+     Nothing overlays a moving ground; no scrim, no halo.
+
+     NO COLOUR IS CHANGED ON THIS SLIDE, and that is the finding rather than
+     an omission. Slide 3's descriptions went navy because slide 4 authors ITS
+     reading text navy; here the reading text ALREADY IS #002060, measuring
+     8.68 on #A7C6ED. Adopting the sibling's convention means leaving it
+     exactly as authored. Everything else is display or decoration and keeps
+     its authored white by the same rule slide 3's numerals keep theirs:
+         Subtitle 4   #002060   8.68  reading text  -- correct as authored
+         Title 3      #FFFFFF   1.76  display type  -- decorative, kept
+         TextBox 5    white 50% 1.34  numeral       -- decorative, kept
+         Oval A-H     #FFFFFF on #1665BA  5.83      -- carries its own ground
+     The badges are the same self-grounded disc as Group A's, so they need
+     nothing on any ground.
+
+     GROUND: rule 33, carry the ground and drop the geometry. The authored
+     panel is a rect filling the right 50%; on a phone there is no right half,
+     so its FILL becomes the canvas background and the rect itself goes. The
+     colour is the deck's own #A7C6ED, not a chosen one.
+
+     THE BOXES ARE RE-LAID, NOT RESIZED. The earlier headroom table put this
+     slide's description at 4.92px maximum inside its authored box against the
+     16.83px the deck's reading size asks for -- 0.29x, no headroom at all. So
+     the text block is rebuilt from the top rather than scaled: every offset
+     below is arithmetic from the band, and nothing depends on flow.
+     ================================================================== */
+  #s9.slide{{align-items:stretch;min-height:100svh}}
+  #s9 .canvas{{
+    --edge9:clamp(16px,5vw,26px);
+    --pad9:clamp(18px,5vw,28px);
+    --gutter9:clamp(8px,2.4vw,12px);
+    --photo-h:calc(100vw / 0.9260);
+    --num-fs:clamp(28px,8.4vw,40px);
+    --ttl-fs:clamp(30px,9.2vw,44px);
+    --desc-fs:calc(var(--read-x) / var(--x-roboto-condensed));
+    --badge9:clamp(18px,5.4vw,24px);
+    --gap1:clamp(8px,2.4vw,14px);
+    --gap2:clamp(14px,4vw,22px);
+    /* The badge pitch IS the line pitch -- one disc per description line, as
+       authored (8 paragraphs, 8 discs, a 21.863pt pitch on the canvas). They
+       are driven by the same --line so they cannot drift apart. */
+    --line:calc(var(--desc-fs) * 1.62);
+    --num-top:calc(var(--photo-h) + var(--pad9));
+    --ttl-top:calc(var(--num-top) + var(--num-fs) + var(--gap1));
+    --desc-top:calc(var(--ttl-top) + var(--ttl-fs) * 1.02 + var(--gap2));
+    /* THE PANEL MUST BE TOLD ITS OWN HEIGHT. Every shape on this slide is
+       absolutely positioned, and an absolutely positioned child contributes
+       NOTHING to its parent's height -- so `height:auto` leaves the canvas at
+       exactly `min-height:100svh` no matter how far the content runs, and
+       `.canvas{{overflow:hidden}}` then clips whatever is past it. On a 440px
+       iPhone the eighth list row fell outside that box: H invisible, G half
+       cut, and unreachable because the panel had no height to scroll into.
+       --content-h is the real bottom of the content, from the same terms that
+       place it, and max() keeps 100svh as a FLOOR rather than a ceiling.
+       Mode B means the panel grows to its content; that only happens if the
+       content is in flow OR the height is stated, and here it is stated. */
+    --content-h:calc(var(--desc-top) + 8 * var(--line) + var(--pad9));
     container-type:inline-size;
-    width:100%;height:auto;min-height:0;aspect-ratio:auto;
-    display:flex;flex-direction:column;align-items:stretch;
-    padding:0}}
+    width:100%;height:auto;aspect-ratio:auto;
+    min-height:max(100svh,var(--content-h));
+    background:#A7C6ED;padding:0}}
+  #s9 [data-name="Google Shape;37;p9"]{{display:none!important}}
 
-  /* `position:relative`, NOT `static` -- rule 41(u). `.cropw` is
-     `position:absolute;inset:0` and resolves against the nearest POSITIONED
-     ancestor, so a static image stops being that ancestor and the wrapper
-     binds to the canvas instead. Measured on the first build: `.cropw` came
-     out 960.3px tall inside a 299.5px image box, and `overflow:hidden` on
-     `.sh.im` did not clip it, because a static ancestor does not clip an
-     absolutely positioned descendant whose containing block is further up.
-     The photograph painted across the whole slide. `relative` keeps the shape
-     in flow AND keeps it the containing block.
-     The authored aspect is equally load-bearing: the img inside `.cropw` is
-     placed by srcRect PERCENTAGES, which are only correct while the box keeps
-     the ratio they were computed against (rule 22(a), rule 31). */
-  #s13 .sh.im{{position:relative!important;inset:auto!important;
-    left:auto!important;top:auto!important;
-    width:100%!important;height:auto!important;
-    transform:none!important;flex:0 0 auto}}
-  /* NO `order` -- rule 41(v). The DOM is already in the right sequence, so it
-     buys no layout, and it costs paint order: flex items paint in
-     ORDER-MODIFIED document order while the absolutely positioned badges are
-     not flex items and keep raw document order. With order:1 / order:2 here
-     the images were re-sequenced past the badges and the blue discs did not
-     render at all. Setting order:9 on the badges did not help, because order
-     does not apply to them. Removing it restored the badges with the layout
-     bit for bit unchanged. z-index would be forbidden anyway (rule 21). */
-  #s13 [data-name="Picture 2"]{{aspect-ratio:var(--ar1)}}
-  #s13 [data-name="Picture 4"]{{aspect-ratio:var(--ar2)}}
+  /* the band: authored aspect, so the crop's srcRect percentages stay valid
+     and `.cropw` keeps this shape as its positioned ancestor (rule 41(u)). */
+  #s9 [data-name="Picture 7"]{{
+    left:0!important;right:0!important;top:0!important;bottom:auto!important;
+    width:auto!important;height:var(--photo-h)!important}}
 
-  /* Each badge belongs to ONE image and travels with it. It cannot be
-     positioned against that image -- a sibling, and a wrapper is forbidden --
-     but it does not need to be: each plate's box is arithmetic, so the badge
-     is written as its authored FRACTION OF ITS OWN HOST.
-         Oval 1 'E'  94.17% x 91.40% of Picture 2
-         Oval 3 'B'   9.65% x 22.04% of Picture 4
-     The fractions are invariant; the pixels are not. The host box just went
-     from a 359px column to the full 100vw plate, and because both the left
-     and the top terms are expressed against --plate and --hN, they follow it
-     without being retyped. */
-  #s13 .sh.tx{{width:var(--badge)!important;height:var(--badge)!important;
-    padding:0!important;right:auto!important;bottom:auto!important}}
-  #s13 [data-name="Oval 1"]{{
-    left:calc(0.9417 * var(--plate) - var(--badge) / 2)!important;
-    top:calc(var(--top1) + 0.9140 * var(--h1) - var(--badge) / 2)!important}}
-  #s13 [data-name="Oval 3"]{{
-    left:calc(0.0965 * var(--plate) - var(--badge) / 2)!important;
-    top:calc(var(--top2) + 0.2204 * var(--h2) - var(--badge) / 2)!important}}
-  #s13 .sh.tx p.t span{{font-size:calc(var(--badge) * 0.44)!important}}
+  /* every text shape is placed by arithmetic, not flow */
+  #s9 .sh.tx{{right:auto!important;bottom:auto!important;
+    width:auto!important;height:auto!important;padding:0!important}}
+  #s9 [data-name="TextBox 5"]{{
+    left:var(--edge9)!important;top:var(--num-top)!important}}
+  #s9 [data-name="TextBox 5"] p.t span{{
+    font-size:var(--num-fs)!important;line-height:1!important}}
+  /* rule 41(r): display type, one line, no mid-word break */
+  #s9 [data-name="Title 3"]{{
+    left:var(--edge9)!important;top:var(--ttl-top)!important;
+    white-space:nowrap!important;overflow-wrap:normal!important}}
+  #s9 [data-name="Title 3"] p.t span{{
+    font-size:var(--ttl-fs)!important;line-height:1.02!important}}
+
+  /* the description: one line per paragraph, pinned, so the disc column
+     cannot fall out of step with it. Measured at the reading size the longest
+     line is 192.3px ("Harsh lighting & shadow play") in a column of roughly
+     310px, so nowrap costs nothing and buys the alignment guarantee -- and if
+     a future line did outgrow the column it would overflow visibly rather
+     than wrap and silently shift every disc below it. `line-height` is a
+     LENGTH, not a ratio, because p.t carries font-size:0 from the strut fix
+     (rule 41(s)) and a ratio would resolve against zero. */
+  #s9 [data-name="Subtitle 4"]{{
+    left:calc(var(--edge9) + var(--badge9) + var(--gutter9))!important;
+    top:var(--desc-top)!important}}
+  /* `height`, not only `line-height`. Measured: with line-height:27.27px the
+     paragraph box still came out 32.77px, because the line box takes the
+     font's own ascent+descent when those exceed the declared leading -- so
+     the discs drifted -5.5px per row, reaching -46px by the eighth. Setting
+     the box height to the same --line makes the pitch exact BY CONSTRUCTION
+     rather than by prediction: the disc column and the text column are then
+     two readings of one variable and cannot disagree. */
+  #s9 [data-name="Subtitle 4"] p.t{{
+    height:var(--line)!important;overflow:visible;
+    line-height:var(--line)!important;text-align:left!important;
+    padding-left:0!important;text-indent:0!important;
+    white-space:nowrap!important;overflow-wrap:normal!important}}
+  #s9 [data-name="Subtitle 4"] p.t span{{font-size:var(--desc-fs)!important}}
+
+  /* the A-H discs, one per line, on the same --line pitch.
+     Selectors carry `.sh.tx` because `#s9 .sh.tx` above sets
+     `height:auto!important` at (1,2,0) while a bare attribute selector is
+     (1,1,0): both !important, so specificity decides, and the discs rendered
+     11.6px instead of 21.1px and sat a constant 4.77px above their lines.
+     Third time on this deck (slide 3's header, slide 13's images):
+     !important settles importance, not rank. */
+  #s9 .sh.tx[data-name="Oval 9"],#s9 .sh.tx[data-name="Oval 10"],
+  #s9 .sh.tx[data-name="Oval 11"],#s9 .sh.tx[data-name="Oval 12"],
+  #s9 .sh.tx[data-name="Oval 13"],#s9 .sh.tx[data-name="Oval 14"],
+  #s9 .sh.tx[data-name="Oval 15"],#s9 .sh.tx[data-name="Oval 16"],
+  #s9 .sh.tx[data-name="Oval 17"],#s9 .sh.tx[data-name="Oval 1"]{{
+    width:var(--badge9)!important;height:var(--badge9)!important}}
+  #s9 .sh.tx[data-name="Oval 9"],#s9 .sh.tx[data-name="Oval 10"],
+  #s9 .sh.tx[data-name="Oval 11"],#s9 .sh.tx[data-name="Oval 12"],
+  #s9 .sh.tx[data-name="Oval 13"],#s9 .sh.tx[data-name="Oval 14"],
+  #s9 .sh.tx[data-name="Oval 15"],#s9 .sh.tx[data-name="Oval 16"]{{
+    left:var(--edge9)!important}}
+  #s9 .sh.tx[data-name="Oval 9"]{{top:calc(var(--desc-top) + 0.5 * var(--line)
+    - var(--badge9) / 2)!important}}
+  #s9 .sh.tx[data-name="Oval 10"]{{top:calc(var(--desc-top) + 1.5 * var(--line)
+    - var(--badge9) / 2)!important}}
+  #s9 .sh.tx[data-name="Oval 11"]{{top:calc(var(--desc-top) + 2.5 * var(--line)
+    - var(--badge9) / 2)!important}}
+  #s9 .sh.tx[data-name="Oval 12"]{{top:calc(var(--desc-top) + 3.5 * var(--line)
+    - var(--badge9) / 2)!important}}
+  #s9 .sh.tx[data-name="Oval 13"]{{top:calc(var(--desc-top) + 4.5 * var(--line)
+    - var(--badge9) / 2)!important}}
+  #s9 .sh.tx[data-name="Oval 14"]{{top:calc(var(--desc-top) + 5.5 * var(--line)
+    - var(--badge9) / 2)!important}}
+  #s9 .sh.tx[data-name="Oval 15"]{{top:calc(var(--desc-top) + 6.5 * var(--line)
+    - var(--badge9) / 2)!important}}
+  #s9 .sh.tx[data-name="Oval 16"]{{top:calc(var(--desc-top) + 7.5 * var(--line)
+    - var(--badge9) / 2)!important}}
+
+  /* the two discs that live ON the photograph travel with it, written as
+     their authored fraction of the photo box (rule 41(v)'s companion: they
+     are absolute over an absolute band, DOM-later, so they paint above it
+     without a z-index). */
+  #s9 .sh.tx[data-name="Oval 17"]{{
+    left:calc(0.0979 * 100vw - var(--badge9) / 2)!important;
+    top:calc(0.0813 * var(--photo-h) - var(--badge9) / 2)!important}}
+  #s9 .sh.tx[data-name="Oval 1"]{{
+    left:calc(0.1517 * 100vw - var(--badge9) / 2)!important;
+    top:calc(0.0813 * var(--photo-h) - var(--badge9) / 2)!important}}
+  #s9 .sh.tx[data-name^="Oval"] p.t span{{
+    font-size:calc(var(--badge9) * 0.46)!important}}
+
 }}
 """
 

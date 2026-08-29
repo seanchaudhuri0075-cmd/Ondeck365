@@ -1330,8 +1330,8 @@ Decks referenced: **Wheeber**, **FrameTag**, **Global ImAIge** (Global Image Fac
 
 ## 41. OOXML properties that do not survive a naive CSS translation — and the method traps that hide them
 
-Deck 10 (Secret) surfaced six of these in one build (a)-(f), then sixteen more
-across later builds (g)-(v). They are grouped because they share a shape: **a
+Deck 10 (Secret) surfaced six of these in one build (a)-(f), then seventeen more
+across later builds (g)-(w). They are grouped because they share a shape: **a
 property the source states plainly, that the renderer either never reads or
 translates into a CSS construct with different semantics.** Each was invisible
 in code review and each produced output that looked deliberate.
@@ -1339,7 +1339,8 @@ in code review and each produced output that looked deliberate.
 (a)-(f) are all text-layout properties, which is what the entry was originally
 titled for. (g)-(k) extend that to the inheritance chain those properties
 travel down; (l) is a PICTURE FILL property and is here because it fails the
-same way; (m)-(q) are the METHOD traps that let the rest survive review; (r)
+same way; (m)-(q) are the METHOD traps that let the rest survive review; (w)
+is a cascade mechanic the reflow itself creates; (r)
 returns to (a)'s territory, where the deck-wide default hides; (s) is (m)
 again with the wrong basis rather than the wrong unit; and (t) is the same
 shape in an IMAGE property -- a number that is exact for the authored box and
@@ -1834,6 +1835,32 @@ overflow.
   is treating the symptom. *Assertion:* assert no `order` is emitted for a
   shape whose document position already matches its intended paint position.
 
+### (w) `!important` settles importance, not RANK — a bare attribute selector loses to a compound class selector
+
+- **Symptom** — three times on one deck, a rule written with `!important`
+  simply did not apply, and each time the failure looked like something else:
+  slide 3's header painted underneath its photo band; slide 13's images
+  ignored their reflow; slide 9's list discs rendered 11.6px instead of 21.1px
+  and sat a constant 4.77px above the rows they mark.
+- **Root cause** — the reflow declares its sweeping rules on classes:
+  `#sN .sh.tx{...!important}` is **(1,2,0)**. The per-shape overrides address
+  a shape by name: `#sN [data-name="..."]{...!important}` is only **(1,1,0)**.
+  Once BOTH declarations are `!important`, importance no longer separates
+  them and the cascade falls through to SPECIFICITY — which the sweeping rule
+  wins. Adding `!important` to the loser changes nothing, because it already
+  had it.
+- **Rule** — a per-shape override must out-SPECIFY the class rule it is
+  overriding, not merely match its importance: write
+  `#sN .sh.tx[data-name="..."]` (1,3,0), not `#sN [data-name="..."]`.
+  *Assertion:* for any property set both by a class rule and a data-name rule
+  inside the same block, assert the data-name selector carries the class.
+- **Why it keeps happening.** `!important` reads as "this wins", and in the
+  common case — beating an inline style — it does. It only fails against
+  another `!important`, which is exactly the situation a sweeping reflow rule
+  creates. **The tell is that the fix "did nothing":** if adding `!important`
+  changes no pixel, the contest is no longer about importance and the next
+  question is rank, not more importance.
+
 - **Proven by** — Deck 10 (Secret), 2026-08-27/28.
 
 ---
@@ -1869,7 +1896,32 @@ overflow.
 - **Corollary** — when a measurement and a screenshot disagree, the screenshot
   wins and the measurement is the thing to explain. Here the measurement was
   never wrong; it was answering a different question than the one being asked.
-- **Proven by** — Deck 10 (Secret), slide 13, 2026-08-29.
+
+- **RECURRENCE, slide 9.** A "fits, no scroll" check reported
+  `desc bottom 753 of 844` and passed while the last two rows were cut off and
+  unreachable on a 440px iPhone. It failed the same way as the first two, for
+  two compounding reasons. **It measured the wrong element's box:** the bottom
+  taken was the last `<p>` inside the description shape, but the rows that got
+  clipped are eight separate absolutely positioned `Oval` siblings, which that
+  box does not contain. **And it compared against a constant:** every shape on
+  that slide is absolutely positioned, so nothing contributed to the canvas's
+  height, `height:auto` left it at exactly `min-height:100svh`, and the
+  comparison `content < canvas height` could not fail no matter how far the
+  content ran. A check that cannot fail is not a check.
+- **So the rule needs its own corollary: measure the LAST RENDERED ROW against
+  the VIEWPORT, never the container's reported height.** A container's height
+  is an output of the same layout under test and is frequently a floor
+  (`min-height`) rather than a fit. Take the bottom of the deepest thing
+  actually drawn, and take it at more than one viewport — 375, 390, 430, 440
+  here, plus a short-viewport case for the browser chrome that `svh` accounts
+  for and a desktop iframe does not.
+- **Three instruments, three confident wrong answers about a different
+  question than the one asked:** a cached page (41(p)), a cached URL on a
+  device (41(q)), a live geometry probe reading the wrong property (42), and
+  now a live probe reading the right property on the wrong element against a
+  constant. The pattern is not staleness; it is that **an instrument returns a
+  true statement, and the mistake is believing it answers the question.**
+- **Proven by** — Deck 10 (Secret), slides 13 and 9, 2026-08-29.
 
 ---
 
