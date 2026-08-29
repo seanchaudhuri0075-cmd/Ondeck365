@@ -745,6 +745,285 @@ p.t{{margin:0;line-height:normal}}
   #s2 [data-name="Subtitle 2"] p.t{{
     padding-left:0!important;text-indent:0!important}}
   #s2 [data-name="Subtitle 2"] p.t span{{font-size:var(--body-fs)!important}}
+  /* ==================================================================
+     SLIDE 3 -- MODE B: a FLOWING panel, not a positioned canvas.
+     Slides 1 and 2 kept the authored canvas and moved shapes inside it.
+     This one cannot: it is a 2x2 of numeral / title / description, and a
+     2x2 on a phone is a 1x4 -- the rows have to stack and the panel has to
+     grow with them. The headroom measurement is what forces it: on the
+     letterbox canvas slide 3's description boxes top out at 8.46-9.56px
+     against the 16.83px the deck's reading size asks for, so no amount of
+     resizing inside the authored boxes reaches a legible size. The boxes
+     themselves have to be re-laid, which is what Mode B does.
+     ================================================================== */
+  #s3.slide{{align-items:stretch;min-height:100svh}}
+
+  /* container-type:inline-size, and ONLY on this slide.
+     A flowing panel needs an INDEFINITE block axis; `container-type:size`
+     forbids exactly that, because size containment makes the box's height
+     independent of its contents. Slide 1's comment explains why the deck as
+     a whole must not switch -- every cqh value silently retargets. Slide 3
+     can, because it has only two kinds of cqh value and both are overridden
+     below: the four numeral paddings go to 0 with the static reflow, and the
+     two flanking rules are given an explicit border-width. cqw is NOT
+     affected -- inline-size still supplies the inline axis -- so any
+     authored type left unoverridden keeps resolving as before. */
+  #s3 .canvas{{
+    --edge3:clamp(18px,5.5vw,30px);
+    --pad3:clamp(26px,7vw,44px);
+    --row-gap:clamp(22px,6vw,34px);
+    --hook-fs:clamp(34px,10.5vw,54px);
+    --num-fs:clamp(30px,9vw,46px);
+    --ttl-fs:clamp(20px,6vw,29px);
+    /* the reading size, adopted now that this slide is reflowed */
+    --desc-fs:calc(var(--read-x) / var(--x-roboto-condensed));
+    /* Roboto Condensed digits are TABULAR -- 0.4937em each, so every
+       two-digit numeral is exactly 0.9873em wide and all four rows share one
+       offset. The title starts at 0.72 of that, so it overlaps the numeral's
+       right quarter; authored, the title box starts 32.3% into the numeral
+       box, which is the same relationship read off the source. */
+    --num-ink:calc(var(--num-fs) * 0.9873);
+    --ttl-indent:calc(var(--num-ink) * 0.72);
+    --ttl-rise:calc(var(--num-fs) * 0.44);
+    /* ---- the photo BAND ----
+       svh, not %: this canvas has `height:auto` so a percentage height
+       resolves to auto (rule 22's note), and the band would collapse.
+       46svh is the share the band wants; the second term is the floor guard
+       -- measured, the four rows plus their gap and the bottom padding need
+       442px at 375x667, the shortest phone supported, so the band may not
+       take more than what is left. min() picks whichever binds: 374px at
+       390x844, 429px at 430x932, 197px at 375x667, all fitting without
+       scroll. */
+    --band-h:min(46svh,calc(100svh - 470px));
+    --head-m:clamp(10px,3vw,16px);
+    /* the header's own height, stated so --band-slack can place it: two 1px
+       rules, their two margins, and one line of --hook-fs at 1.02. */
+    --head-h3:calc(2px + 2 * var(--head-m) + var(--hook-fs) * 1.02);
+    /* half the air left in the band once the header is in it. Used TWICE --
+       once to centre the header on the band, once to drop the first row past
+       the band's bottom edge -- so the two cannot drift apart. */
+    --band-slack:calc((var(--band-h) - var(--pad3) - var(--head-h3)) / 2);
+    container-type:inline-size;
+    width:100%;height:auto;min-height:100svh;aspect-ratio:auto;
+    display:flex;flex-direction:column;align-items:flex-start;
+    padding:var(--pad3) var(--edge3) calc(var(--pad3) * 1.15)}}
+
+  /* ---- the photo is a BAND, at full strength ----
+     Both earlier attempts put the text ON the photograph and then tried to
+     make a moving ground safe -- first a flat scrim, then per-element halos.
+     Neither can work: on a tall panel the photo is behind every line, so each
+     line lands on a different tone, and no per-element treatment fixes a
+     ground that moves. The photo now occupies the upper band ONLY, the rows
+     sit below it on the bare authored blue, and nothing overlays anything
+     except VISUAL HOOKS and its two rules, which are white and belong on a
+     photograph.
+
+     THE 22% WASH IS DROPPED HERE. It is not decoration: a wash exists to make
+     a photograph safe to put text on, and no text sits on this one any more.
+     Keeping it would spend the picture for a service nothing is asking for.
+     At the authored 22% the photo carries 33.4% of its own tonal range; at
+     0.51 of scrim it carried 8.2%; at full strength it carries all of it.
+     This is the same reasoning slide 4 already applies -- its photo is
+     opacity 1, because its text sits beside the photo rather than on it.
+
+     object-position 92%, and the 92 is DERIVED, not picked. The subject --
+     most-saturated columns x 1504-1632 -- centres at x=1568, i.e. 81.7% of
+     the image width. object-position is a percentage of the OVERFLOW, not of
+     the image, so the number that centres her depends on the box: it was
+     85.6% for the full-height panel and is 92% for this band. That is rule
+     41(t) restated -- the position has to be re-solved whenever the box
+     changes, and only the SUBJECT's 81.7% travels between them. Checked
+     across the range: at 390 the band shows source x 1325-1805, at 430
+     x 1305-1766, at 375 x 961-1837; she is inside all three. */
+  #s3 [data-name="Picture 2"]{{
+    position:absolute!important;left:0!important;right:0!important;
+    top:0!important;bottom:auto!important;
+    width:auto!important;height:var(--band-h)!important;
+    opacity:1!important}}
+  #s3 [data-name="Picture 2"]>.cropw{{opacity:1}}
+  #s3 [data-name="Picture 2"]>.cropw>img{{
+    position:absolute!important;inset:0!important;
+    left:auto!important;top:auto!important;
+    width:100%!important;height:100%!important;
+    object-fit:cover!important;object-position:92% 50%}}
+
+  /* ==================================================================
+     NO SCRIM AND NO HALO. READ THIS BEFORE ADDING EITHER.
+     A flat rgba(0,32,96,0.51) ::after shipped here first, then per-element
+     text-shadow halos replaced it. Both were removed, and both failed for the
+     same reason: they assumed the text had to overlay the photograph.
+
+     The scrim was also solved against the WRONG PICTURE. Its alpha was tuned
+     while object-position was 66.4% -- the authored srcRect midpoint -- which
+     showed sky and a bridge railing rather than the subject at 81.7%. That
+     region is bright and near-featureless, so it flattered the arithmetic
+     twice: it made white text look like the only problem, and it left the
+     navy titles on a light ground where they still passed at 3.23. Reframe
+     onto the subject and hold the same 0.51 and those titles fall to 2.57.
+     The scrim passed a test taken over a featureless bright region; it never
+     passed over the photograph. And it cost the picture: p1-p99 luminance of
+     the photo region went 0.8132 source -> 0.2717 at the authored 22% ->
+     0.0663 under the scrim, i.e. 8.2% of the original, because a flat scrim
+     multiplies whatever survives by (1 - alpha). The knob that buys text
+     contrast is the same knob that spends the image.
+
+     The halos then read on device as artefact rather than lift -- a grey
+     outline on VISUAL HOOKS, dark fringing on the descriptions -- and they
+     could not help the titles at all, which sat on her face in row 1 and her
+     shirt in row 4. One navy cannot serve two grounds that far apart.
+     ================================================================== */
+
+  /* ---- the static reflow, TEXT COLUMN ONLY ----
+     rule 22's two mechanics: shapes go static, and every inline left/top is
+     neutralised or a positioned ancestor re-applies it as a flow offset. The
+     image is deliberately not in this selector -- it is the ground, and it
+     stays positioned. */
+  #s3 .sh.tx,#s3 .sh.ln{{
+    position:static!important;inset:auto!important;
+    left:auto!important;top:auto!important;
+    width:auto!important;height:auto!important;
+    transform:none!important;padding:0!important;
+    flex:0 0 auto;max-width:100%}}
+
+  /* ---- header: the two authored rules keep their job as a divider ----
+     They flank VISUAL HOOKS horizontally on the canvas. In a column there is
+     no beside, so one goes above and one below -- both shapes kept, neither
+     hidden. border-top is restated in px because this canvas is inline-size
+     and the authored 0.1852cqh no longer has a block axis to resolve
+     against. */
+  #s3 .sh.ln{{align-self:center;width:clamp(38px,11vw,58px)!important;
+    border-top-width:1px!important}}
+  /* position:relative, and it is LOAD-BEARING, not tidiness. The static
+     reflow above sets `position:static` on every text shape; the photo is
+     `position:absolute`. A positioned element paints above a non-positioned
+     one whatever the DOM order, so the band would cover these three outright
+     -- the same trap henhouse's render.py records against its own captions.
+     Making them relative puts them back in the positioned set, where DOM
+     order decides, and the photo is first in DOM. Still no z-index (rule 21).
+     `!important` IS REQUIRED and is not decoration: the static reflow above
+     declares `position:static!important`, so a plain `position:relative` here
+     loses to it and the header goes on painting underneath the band. It needs
+     to WIN the cascade, not out-specify it -- which is the same note henhouse
+     leaves against its own captions, and which was written into this comment
+     one round before the declaration actually obeyed it.
+     --band-slack centres the header on the band; the first row below reuses
+     the same term, so the two cannot drift. */
+  /* The selector carries `.sh.tx` / `.sh.ln` for a reason: BOTH declarations
+     are `!important`, so importance no longer separates them and SPECIFICITY
+     decides. `#s3 .sh.tx` is (1,2,0); `#s3 [data-name=...]` is only (1,1,0),
+     so the plain attribute selector loses even with !important on it and the
+     header keeps painting under the band. Adding the class puts this at
+     (1,3,0), which wins. !important is necessary and was not sufficient. */
+  #s3 .sh.ln[data-name="Google Shape;162;p31"],
+  #s3 .sh.tx[data-name="Google Shape;152;p31"],
+  #s3 .sh.ln[data-name="Google Shape;161;p31"]{{position:relative!important}}
+  #s3 [data-name="Google Shape;162;p31"]{{order:1;
+    margin-top:var(--band-slack);margin-bottom:var(--head-m)}}
+  #s3 [data-name="Google Shape;152;p31"]{{order:2;align-self:center}}
+  #s3 [data-name="Google Shape;161;p31"]{{order:3;margin-top:var(--head-m)}}
+  #s3 [data-name="Google Shape;152;p31"] p.t span{{
+    font-size:var(--hook-fs)!important;line-height:1.02!important}}
+  /* rule 41(r), the two-word case. VISUAL HOOKS may break at its SPACE --
+     that is ordinary wrapping and costs nothing. What it must not do is
+     break inside a word, which the deck-wide overflow-wrap:anywhere would
+     do the moment the pair is 1px too wide. `normal` removes the mid-word
+     break without removing the space break, so nowrap is not needed here
+     and would only force an overflow. */
+  #s3 [data-name="Google Shape;152;p31"]{{overflow-wrap:normal!important}}
+
+  #s3 [data-name="Google Shape;151;p31"]{{order:10}}
+  #s3 [data-name="Google Shape;160;p31"]{{order:11}}
+  #s3 [data-name="Google Shape;153;p31"]{{order:12}}
+  #s3 [data-name="Google Shape;150;p31"]{{order:20}}
+  #s3 [data-name="Google Shape;154;p31"]{{order:21}}
+  #s3 [data-name="Google Shape;155;p31"]{{order:22}}
+  #s3 [data-name="Google Shape;149;p31"]{{order:30}}
+  #s3 [data-name="Google Shape;156;p31"]{{order:31}}
+  #s3 [data-name="Google Shape;158;p31"]{{order:32}}
+  #s3 [data-name="Google Shape;148;p31"]{{order:40}}
+  #s3 [data-name="Google Shape;157;p31"]{{order:41}}
+  #s3 [data-name="Google Shape;159;p31"]{{order:42}}
+
+  /* ---- numeral: sets the row, and the title rides its right edge ----
+     The pair is kept by FLOW, not by positioning: a wrapper is forbidden,
+     and `position:absolute` cannot resolve against a SIBLING, which is all
+     the numeral ever is to its title. Negative margins give the same
+     relationship with no new element -- the title rises by 0.44 of the
+     numeral's line box and indents by 0.72 of its ink width, so it overlaps
+     the numeral's right quarter exactly as authored. */
+  #s3 [data-name="Google Shape;151;p31"],
+  #s3 [data-name="Google Shape;150;p31"],
+  #s3 [data-name="Google Shape;149;p31"],
+  #s3 [data-name="Google Shape;148;p31"]{{
+    margin-top:var(--row-gap)}}
+  /* row 1 starts BELOW the band. --band-slack + --row-gap is exactly the
+     distance from the header's flow position to the band's bottom edge plus
+     one gap, which is why the same term appears here and on the header. */
+  #s3 [data-name="Google Shape;151;p31"]{{
+    margin-top:calc(var(--band-slack) + var(--row-gap))}}
+  #s3 [data-name="Google Shape;151;p31"] p.t,
+  #s3 [data-name="Google Shape;150;p31"] p.t,
+  #s3 [data-name="Google Shape;149;p31"] p.t,
+  #s3 [data-name="Google Shape;148;p31"] p.t{{text-align:left!important}}
+  #s3 [data-name="Google Shape;151;p31"] p.t span,
+  #s3 [data-name="Google Shape;150;p31"] p.t span,
+  #s3 [data-name="Google Shape;149;p31"] p.t span,
+  #s3 [data-name="Google Shape;148;p31"] p.t span{{
+    font-size:var(--num-fs)!important;line-height:1!important}}
+
+  #s3 [data-name="Google Shape;160;p31"],
+  #s3 [data-name="Google Shape;154;p31"],
+  #s3 [data-name="Google Shape;156;p31"],
+  #s3 [data-name="Google Shape;157;p31"]{{
+    margin-top:calc(-1 * var(--ttl-rise));
+    margin-left:var(--ttl-indent)}}
+  #s3 [data-name="Google Shape;160;p31"] p.t,
+  #s3 [data-name="Google Shape;154;p31"] p.t,
+  #s3 [data-name="Google Shape;156;p31"] p.t,
+  #s3 [data-name="Google Shape;157;p31"] p.t{{text-align:left!important}}
+  #s3 [data-name="Google Shape;160;p31"] p.t span,
+  #s3 [data-name="Google Shape;154;p31"] p.t span,
+  #s3 [data-name="Google Shape;156;p31"] p.t span,
+  #s3 [data-name="Google Shape;157;p31"] p.t span{{
+    font-size:var(--ttl-fs)!important;line-height:1.04!important}}
+
+  /* ---- description: the plain static reflow, left ranged, NAVY ----
+     #002060, not the authored #FFFFFF. READ THIS BEFORE REVERTING IT.
+     On this same #A7C6ED panel, SLIDE 4 PUTS ITS READING TEXT IN NAVY: its
+     Subtitle 4 body is #002060 (8.68 against the blue), its display title is
+     white (1.76) and its numeral is white at 50% (1.34). That is the deck's
+     convention -- dark text reads, light text is tonal. Slide 3 INVERTS it,
+     white body and navy titles, and that inversion is the whole reason the
+     white body had no solution on the blue: white on #A7C6ED is 1.76, which
+     no layout fixes and no scrim reaches without destroying the photograph.
+     Two rounds went into building a dark ground under white body copy on a
+     slide whose own sibling solves it by making the body dark. Taking slide
+     4's colour is not inventing one; it is adopting the deck's.
+     The titles were already #002060 and are untouched. The numerals stay
+     white at 50% -- 1.34, failing, and DELIBERATELY so: that is exactly what
+     slide 4's numeral scores, because it is an authored decorative mark and
+     not something anyone reads.
+     Leading is left exactly as authored (rule 14). The authored hanging
+     indent goes, as on slide 2: marL/indent with bullet_suppressed true is a
+     marker indent with no marker. */
+  #s3 [data-name="Google Shape;153;p31"],
+  #s3 [data-name="Google Shape;155;p31"],
+  #s3 [data-name="Google Shape;158;p31"],
+  #s3 [data-name="Google Shape;159;p31"]{{
+    margin-top:clamp(6px,1.8vw,10px);max-width:34em}}
+  #s3 [data-name="Google Shape;153;p31"] p.t,
+  #s3 [data-name="Google Shape;155;p31"] p.t,
+  #s3 [data-name="Google Shape;158;p31"] p.t,
+  #s3 [data-name="Google Shape;159;p31"] p.t{{
+    text-align:left!important;padding-left:0!important;text-indent:0!important}}
+  #s3 [data-name="Google Shape;153;p31"] p.t span,
+  #s3 [data-name="Google Shape;155;p31"] p.t span,
+  #s3 [data-name="Google Shape;158;p31"] p.t span,
+  #s3 [data-name="Google Shape;159;p31"] p.t span{{color:#002060!important}}
+  #s3 [data-name="Google Shape;153;p31"] p.t span,
+  #s3 [data-name="Google Shape;155;p31"] p.t span,
+  #s3 [data-name="Google Shape;158;p31"] p.t span,
+  #s3 [data-name="Google Shape;159;p31"] p.t span{{font-size:var(--desc-fs)!important}}
 }}
 """
 
