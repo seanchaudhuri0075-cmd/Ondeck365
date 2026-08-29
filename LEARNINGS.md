@@ -1330,8 +1330,8 @@ Decks referenced: **Wheeber**, **FrameTag**, **Global ImAIge** (Global Image Fac
 
 ## 41. OOXML properties that do not survive a naive CSS translation — and the method traps that hide them
 
-Deck 10 (Secret) surfaced six of these in one build (a)-(f), then thirteen more
-across later builds (g)-(s). They are grouped because they share a shape: **a
+Deck 10 (Secret) surfaced six of these in one build (a)-(f), then fourteen more
+across later builds (g)-(t). They are grouped because they share a shape: **a
 property the source states plainly, that the renderer either never reads or
 translates into a CSS construct with different semantics.** Each was invisible
 in code review and each produced output that looked deliberate.
@@ -1340,9 +1340,11 @@ in code review and each produced output that looked deliberate.
 titled for. (g)-(k) extend that to the inheritance chain those properties
 travel down; (l) is a PICTURE FILL property and is here because it fails the
 same way; (m)-(q) are the METHOD traps that let the rest survive review; (r)
-returns to (a)'s territory, where the deck-wide default hides, and (s) is (m)
-again with the wrong basis rather than the wrong unit. The heading widened
-rather than splitting because the lesson is one lesson.
+returns to (a)'s territory, where the deck-wide default hides; (s) is (m)
+again with the wrong basis rather than the wrong unit; and (t) is the same
+shape in an IMAGE property -- a number that is exact for the authored box and
+meaningless for the reflowed one. The heading widened rather than splitting
+because the lesson is one lesson.
 
 ### (a) `wrap="none"` must emit `white-space:nowrap`
 
@@ -1737,6 +1739,52 @@ overflow.
   offset from the midline from 1.89px to 1.12px. Small, and an improvement --
   but it is the general shape of the risk: **anything measured against a box
   that was carrying phantom leading was measured against the wrong box.**
+
+### (t) The authored crop centre is not the subject centre once the box changes aspect
+
+- **Symptom** — deck 10 slide 3's photograph reflowed to a phone as "a flat
+  blue field, the subject gone". The subject was not dimmed; it was **not in
+  the frame**. A scrim then took the blame and was tuned twice, which made the
+  slide worse while measuring better.
+- **Root cause** — the authored `srcRect` window was re-expressed for mobile
+  as `object-fit:cover` plus an `object-position` set to **the window's own
+  midpoint**. That midpoint is the correct answer only for a box that keeps
+  the authored aspect. Slide 3's source is 1920x460 (**4.17:1**) and the mobile
+  panel is 390x844 (**0.46:1**), so `cover` shows **11.1% of the image width**
+  against the authored window's 43.2% -- and the authored window is nearly
+  symmetric about content the photographer put off-centre. Measured: the
+  subject (most-saturated columns, x 1504-1632) centres at **81.7%** of the
+  width; the srcRect midpoint is **66.4%**; the 213px actually shown were sky
+  and a bridge railing.
+- **A crop window states an EXTENT. It does not state a SUBJECT.** Those
+  coincide only while the aspect is unchanged, which is exactly the thing a
+  reflow changes. The wider the source and the narrower the target, the more
+  of the window is discarded and the less the midpoint means: at 4.17:1 into
+  0.46:1, **89% of the authored window is thrown away** and nothing in the
+  source file says which 11% mattered.
+- **Rule** — when a cropped image is re-fitted to a box of a different aspect,
+  `object-position` must be derived from where the SUBJECT is, not from the
+  authored window's midpoint. Locate it rather than assume it -- column-wise
+  saturation and luminance over the source is enough to find a figure against
+  sky or a flat ground -- then solve for the position that centres it in the
+  slice the new box actually shows. *Assertion:* for every reflowed image
+  whose target aspect differs from the authored one by more than ~1.5x, record
+  the fraction of the authored window that survives, and assert the derived
+  `object-position` was computed from a subject measurement rather than copied
+  from the srcRect midpoint.
+- **This is latent on every reframed slide in this deck**, not a slide 3 fact.
+  Deck 10 is a 16:9 deck of panoramic assets going to portrait panels; every
+  slide reflowed into Mode B faces the same discard ratio.
+- **The second-order lesson is worse than the first.** A missed subject does
+  not look like a missed subject -- it looks like a *contrast* problem, because
+  what remains in frame is usually the flat bright background the photographer
+  composed against. Slide 3's scrim was then solved over sky: white text looked
+  like the only failure, and the navy titles passed at 3.23 on a light ground.
+  Reframing onto the subject and holding the same alpha drops those titles to
+  **2.57**. **A value tuned over the wrong region of an image is not a
+  measurement, it is a coincidence** -- so re-derive every image-dependent
+  constant after any reframe, and treat "the fix needs a scrim" as a claim to
+  check against the pixels rather than a conclusion.
 
 - **Proven by** — Deck 10 (Secret), 2026-08-27/28.
 
