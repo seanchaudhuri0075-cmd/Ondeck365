@@ -777,3 +777,39 @@ layout `TITLE` · layout_type `title` · bg `#A7C6ED` (from `slide`) · bg_image
 | 5 | image | `Picture 1` | 70.89 | 91.94 | 352.37 | 182.52 | 9.85 | 22.70 | 48.94 | 45.07 | 5 | slide | — | 0 |  |
 | 6 | image | `Picture 2` | 649.01 | 7.71 | 66.20 | 24.29 | 90.14 | 1.90 | 9.19 | 6.00 | 6 | slide | — | 0 |  |
 
+---
+
+## OPEN ITEM — the `p.t` strut is still live on desktop (820px–~1280px)
+
+Fixed below the breakpoint in `add4538` (`.sh.tx p.t{font-size:0}`, inside the
+`@media` block). **Not fixed above it**, and deliberately so: the fix there
+changes the desktop build and moves the standing test's baseline, which does
+not belong in the middle of a reflow pass.
+
+`p.t` carries a unitless `line-height` but no `font-size` of its own, so it
+inherits 16px from `body` and its strut computes as `ratio x 16px` — a fixed
+pixel leading under text sized in `cqw`. A line box is the taller of the strut
+and its inline content, so the two swap places at a threshold:
+
+```
+slide 4, runs at 1.25cqw, line-height 2.4961
+strut            = 2.4961 x 16px            = 39.94px
+text line box    = 1.25cqw x W/100 x 2.4961
+equal when       W = 39.94 / (0.0125 x 2.4961) = 1280px canvas width
+```
+
+So **820–1280px of canvas width renders slide 4 strut-dominated on desktop**.
+A 1000px-wide window is inside that band today. The deck's smallest run is
+1.1111cqw, so other slides cross over even later.
+
+Measured below the breakpoint before the fix (390px viewport, 219px canvas):
+slide 4's eight paragraphs were **39.94px each instead of 12.16px** — 320px of
+ink in a 98px box. Setting `p.t{font-size:4.875px}`, the size of its own span,
+returned it to 12.16px, which is the proof.
+
+**The fix when it is taken on:** emit a `font-size` on `p.t` from the
+paragraph's own runs, so the ratio binds to the text it belongs to. That is a
+desktop-visible change; expect the standing test to fail and its baseline to
+be re-taken deliberately, not worked around.
+
+Recorded as LEARNINGS rule 41(s).
