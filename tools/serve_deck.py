@@ -11,7 +11,7 @@ misrepresent how the published deck loads.
   python3 tools/serve_deck.py out/venus-hestia 8912
 """
 import os, re, sys
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 
 
 class RangeHandler(SimpleHTTPRequestHandler):
@@ -78,4 +78,9 @@ if __name__ == "__main__":
     host = sys.argv[3] if len(sys.argv) > 3 else "127.0.0.1"
     h = lambda *a, **k: RangeHandler(*a, directory=root, **k)
     print(f"serving {root} on http://{host}:{port}/  (Range: 206 supported)")
-    HTTPServer((host, port), h).serve_forever()
+    # THREADING, not HTTPServer. The deck now emits `autoplay` on seven
+    # videos, so a browser opens up to six concurrent media connections and
+    # holds them open while it reads progressively. A single-threaded server
+    # serves one at a time and every video sits at readyState 0 forever --
+    # which looks exactly like "the videos are broken" and is not.
+    ThreadingHTTPServer((host, port), h).serve_forever()
