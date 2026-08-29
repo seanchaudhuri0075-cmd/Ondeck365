@@ -1330,17 +1330,18 @@ Decks referenced: **Wheeber**, **FrameTag**, **Global ImAIge** (Global Image Fac
 
 ## 41. OOXML properties that do not survive a naive CSS translation — and the method traps that hide them
 
-Deck 10 (Secret) surfaced six of these in one build (a)-(f), then ten more in a
-second (g)-(p). They are grouped because they share a shape: **a property the
-source states plainly, that the renderer either never reads or translates into
-a CSS construct with different semantics.** Each was invisible in code review
-and each produced output that looked deliberate.
+Deck 10 (Secret) surfaced six of these in one build (a)-(f), then twelve more
+across later builds (g)-(r). They are grouped because they share a shape: **a
+property the source states plainly, that the renderer either never reads or
+translates into a CSS construct with different semantics.** Each was invisible
+in code review and each produced output that looked deliberate.
 
 (a)-(f) are all text-layout properties, which is what the entry was originally
 titled for. (g)-(k) extend that to the inheritance chain those properties
 travel down; (l) is a PICTURE FILL property and is here because it fails the
-same way; (m)-(p) are the METHOD traps that let the rest survive review. The
-heading widened rather than splitting because the lesson is one lesson.
+same way; (m)-(q) are the METHOD traps that let the rest survive review; (r)
+returns to (a)'s territory, where the deck-wide default hides. The heading
+widened rather than splitting because the lesson is one lesson.
 
 ### (a) `wrap="none"` must emit `white-space:nowrap`
 
@@ -1628,6 +1629,67 @@ measuring a fresh build** (`location.replace('/index.html?v=' + ...)`), and
 treat agreement between disk and browser as something to establish rather than
 assume. Same family as the polluted-history tab and the non-painting tab
 already in NOTES: the browser is a measurement instrument and it needs zeroing.
+
+### (q) A device rendering is not evidence until the URL is one that device has never seen
+
+(p) is the same trap one layer down; this is the version that survives a hard
+refresh. **Three rounds of slide 1 layout work were spent against a build the
+phone had already cached.** The reported defects -- BEAUTY clipping at the
+canvas edge, and the wordmark rendering in a fallback face -- were both real in
+the cached copy and both already fixed on disk. They were "reproduced" on each
+round because the simulator kept answering from cache, and every fix was
+therefore tuned against a document that no longer existed.
+
+This deck is the worst case for it: the stylesheet is **inline in a 700 KB
+`index.html`**, so there is no separate CSS URL whose own cache entry could
+expire independently, and nothing in the page's URL changes when the CSS does.
+A stable `http://host:port/` plus a large inline document caches hard, and iOS
+Safari honours that far more aggressively than a desktop devtools reload does
+-- the simulator has no "disable cache" checkbox and the phone has no devtools
+at all, so the usual zeroing move is unavailable.
+
+- **Rule** — a screenshot from iOS Safari or the iOS simulator is evidence
+  ONLY if the URL it was loaded from is one that device has never resolved
+  before. **Serve on a fresh port** (or a fresh query string) for every round
+  of device verification; a port used earlier the same day is not fresh.
+  *Assertion:* before accepting a device report, record the port/URL and check
+  it against the ports already served today; if it repeats, re-serve and
+  re-shoot before touching any CSS.
+- **Corollary** — "the fix didn't work" from a device is the LOW-confidence
+  branch. Check the served bytes against the built bytes first
+  (`curl -s URL | shasum -a 256` vs `shasum -a 256 out/<deck>/index.html`);
+  a hash match costs one command and rules out the entire cache family before
+  any layout hypothesis is entertained.
+
+### (r) `overflow-wrap:anywhere` is correct for body copy and hazardous on display type
+
+`build_css` emits `.sh.tx{overflow-wrap:anywhere}` **deck-wide**. That is the
+right default and follows directly from (a): OOXML `wrap="square"` means break
+at the box edge, mid-word if a token does not fit, so authored body copy needs
+it to match PowerPoint.
+
+On DISPLAY type it converts a 1px overflow into a mid-word break. Deck 10's
+wordmark broke as `BEA / UTY` on a 440px iPhone 17 Pro Max -- the first width
+above the 430 the size ramp was tuned at. **The failure mode is the problem,
+not the pixel:** without the rule the shape overflows its box, which is loud
+and visible in review; with it, the shape silently re-flows into something that
+still looks typeset, and a wordmark splitting across two lines reads as a
+design choice rather than as a bug. It degrades a visible failure into an
+invisible one.
+
+The fix is not to narrow the deck-wide rule. It is to say, at the display
+shape, that **a wordmark is one word**: `white-space:nowrap` removes every
+break opportunity at any width, and `overflow-wrap:normal` beside it stops the
+two declarations disagreeing. The size ramp then only has to avoid *needing* to
+overflow.
+
+- **Rule** — any shape carrying display type (a wordmark, a lockup, a numeral
+  plate) must pin `white-space:nowrap;overflow-wrap:normal` rather than inherit
+  the deck-wide `anywhere`. **This is latent in every `phase_1c` deck**, since
+  `overflow-wrap:anywhere` is emitted by the shared builder and no deck opts
+  out. *Assertion:* for every shape classed as display type, assert the
+  computed `overflow-wrap` is not `anywhere`; and assert its rendered width
+  against the box at more than one viewport, per (a).
 
 - **Proven by** — Deck 10 (Secret), 2026-08-27/28.
 
