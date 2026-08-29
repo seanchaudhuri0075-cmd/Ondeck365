@@ -258,7 +258,22 @@ def shape_html(sh, man, W, H) -> str:
         return (f'<div class="sh vid"{nm(sh)} style="{style};--ar:{v["aspect"]}">{under}'
                 f'<video src="assets/{v["out"]}"'
                 f'{f" poster={chr(34)}{poster}{chr(34)}" if poster else ""}'
-                f' preload="none" muted loop playsinline></video></div>')
+                # THE EDITOR'S ATTRIBUTE SET (Deck_Editor_v14.html:1318),
+                # because the previous one could not play. `preload="none"`
+                # with no `autoplay`, no `controls` and no player script in
+                # the document meant all seven videos were inert: nothing
+                # would ever have started them. The editor emits
+                # `autoplay muted loop playsinline` and no preload, and that
+                # is what is emitted here. `muted` is not optional -- an
+                # unmuted autoplay is blocked by every mobile browser.
+                # DELIBERATE DEVIATION: the authored `poster` is KEPT, which
+                # the editor drops. It costs nothing when autoplay works and
+                # is the only thing on screen when a browser refuses it (Low
+                # Power Mode, Data Saver), where the editor would show black.
+                # venus_hestia's IntersectionObserver player is deliberately
+                # NOT ported: it is a second mechanism for the same job and
+                # rule 22 keeps this document script-free for the editor.
+                f' autoplay muted loop playsinline></video></div>')
 
     if t == "line":
         # A CONNECTOR IS A STROKE, NOT A BOX. Deck 10's eight are all
@@ -456,10 +471,222 @@ def plate_css(sl, W: float) -> str:
     return "\n".join(out)
 
 
+# Group B: the SECTION_TITLE_AND_DESCRIPTION dividers, photo 52.09% left and
+# panel 50% right on the canvas. Four slides, one code path, generated from
+# the model -- slide 9 was hand-built first and is now emitted from here, so
+# its measured numbers are the regression check on the generator.
+GROUP_B = (4, 9, 14, 21)
+
+
+def divider_css(sl, W: float) -> str:
+    n = sl["n"]
+    im = next(sh for sh in sl["shapes"] if sh["type"] == "image")
+    rect = [sh for sh in sl["shapes"] if sh["type"] == "rect"]
+    ttl = next(sh for sh in sl["shapes"] if sh["name"] == "Title 3")
+    num = next(sh for sh in sl["shapes"] if sh["name"] == "TextBox 5")
+    sub = next(sh for sh in sl["shapes"] if sh["name"] == "Subtitle 4")
+    ov = [sh for sh in sl["shapes"] if sh["name"].startswith("Oval")]
+    cen = lambda o: (o["x"] + o["w"] / 2, o["y"] + o["h"] / 2)
+    on_photo = [o for o in ov
+                if im["x"] <= cen(o)[0] <= im["x"] + im["w"]
+                and im["y"] <= cen(o)[1] <= im["y"] + im["h"]]
+    lst = sorted((o for o in ov if o not in on_photo), key=lambda o: o["y"])
+    npara = len(sub["paras"])
+    # The disc column and the description are one list rendered twice. If the
+    # source ever disagrees, say so here rather than shipping a column that
+    # silently runs short or long against the rows it marks.
+    assert len(lst) == npara, f"slide {n}: {len(lst)} discs vs {npara} paragraphs"
+    # The headline is NOT always one line. INGREDIENT<br>LED and
+    # COLOR+<br>TREATMENT carry an authored break (rule 41(b): `<a:br/>` is
+    # honoured), and `white-space:nowrap` does not suppress a <br> -- it only
+    # stops WORD wrapping. Assuming one line dropped that second line on top
+    # of row A. Counted from the model, not guessed: paragraphs plus authored
+    # breaks, so the list starts below whatever the headline reserves.
+    ttl_lines = sum(1 + sum(1 for r in (pa.get("runs") or []) if r.get("br_after"))
+                    for pa in ttl["paras"])
+    ar = im["w"] / im["h"]
+    o = [f"  #s{n}.slide{{align-items:stretch;min-height:100svh}}",
+         f"  #s{n} .canvas{{",
+         "    --edge9:clamp(16px,5vw,26px);",
+         "    --pad9:clamp(18px,5vw,28px);",
+         "    --gutter9:clamp(8px,2.4vw,12px);",
+         f"    --photo-h:calc(100vw / {ar:.4f});",
+         "    --num-fs:clamp(28px,8.4vw,40px);",
+         "    --ttl-fs:clamp(30px,9.2vw,44px);",
+         "    --desc-fs:calc(var(--read-x) / var(--x-roboto-condensed));",
+         "    --badge9:clamp(18px,5.4vw,24px);",
+         "    --gap1:clamp(8px,2.4vw,14px);",
+         "    --gap2:clamp(14px,4vw,22px);",
+         "    --line:calc(var(--desc-fs) * 1.62);",
+         "    --num-top:calc(var(--photo-h) + var(--pad9));",
+         "    --ttl-top:calc(var(--num-top) + var(--num-fs) + var(--gap1));",
+         f"    --ttl-lines:{ttl_lines};",
+         "    --ttl-h:calc(var(--ttl-fs) * 1.02 * var(--ttl-lines));",
+         "    --desc-top:calc(var(--ttl-top) + var(--ttl-h) + var(--gap2));",
+         # rule 42's corollary, as CSS: every shape here is absolutely
+         # positioned and so contributes nothing to the parent's height. The
+         # panel must be TOLD its bottom or `overflow:hidden` clips the last
+         # rows and leaves them unreachable. max() makes 100svh a floor.
+         f"    --content-h:calc(var(--desc-top) + {npara} * var(--line)"
+         " + var(--pad9));",
+         "    container-type:inline-size;",
+         "    width:100%;height:auto;aspect-ratio:auto;",
+         "    min-height:max(100svh,var(--content-h));",
+         f"    background:{rect[0].get('fill') or '#A7C6ED'};padding:0}}"]
+    for r in rect:
+        o.append(f'  #s{n} [data-name="{esc(r["name"])}"]'
+                 "{display:none!important}")
+    o += [f'  #s{n} [data-name="{esc(im["name"])}"]{{',
+          "    left:0!important;right:0!important;top:0!important;"
+          "bottom:auto!important;",
+          "    width:auto!important;height:var(--photo-h)!important}",
+          f"  #s{n} .sh.tx{{right:auto!important;bottom:auto!important;",
+          "    width:auto!important;height:auto!important;padding:0!important}",
+          f'  #s{n} .sh.tx[data-name="{esc(num["name"])}"]{{',
+          "    left:var(--edge9)!important;top:var(--num-top)!important}",
+          f'  #s{n} [data-name="{esc(num["name"])}"] p.t span{{',
+          "    font-size:var(--num-fs)!important;line-height:1!important}",
+          f'  #s{n} .sh.tx[data-name="{esc(ttl["name"])}"]{{',
+          "    left:var(--edge9)!important;top:var(--ttl-top)!important;",
+          "    white-space:nowrap!important;overflow-wrap:normal!important}",
+          f'  #s{n} [data-name="{esc(ttl["name"])}"] p.t span{{',
+          "    font-size:var(--ttl-fs)!important;line-height:1.02!important}",
+          f'  #s{n} .sh.tx[data-name="{esc(sub["name"])}"]{{',
+          "    left:calc(var(--edge9) + var(--badge9)"
+          " + var(--gutter9))!important;",
+          "    top:var(--desc-top)!important}",
+          f'  #s{n} [data-name="{esc(sub["name"])}"] p.t{{',
+          # height AND line-height: the line box otherwise takes the font's
+          # own ascent+descent and the disc column drifts against the rows.
+          "    height:var(--line)!important;overflow:visible;",
+          "    line-height:var(--line)!important;text-align:left!important;",
+          "    padding-left:0!important;text-indent:0!important;",
+          "    white-space:nowrap!important;overflow-wrap:normal!important}",
+          f'  #s{n} [data-name="{esc(sub["name"])}"] p.t span'
+          "{font-size:var(--desc-fs)!important}"]
+    # discs: `.sh.tx` in the selector, per rule 41(w) -- `#sN .sh.tx` above is
+    # (1,2,0) and a bare attribute selector is only (1,1,0), so !important
+    # alone loses and the discs come out the wrong size in the wrong place.
+    allov = ",\n  ".join(f'#s{n} .sh.tx[data-name="{esc(o2["name"])}"]'
+                         for o2 in ov)
+    o.append(allov + "{width:var(--badge9)!important;"
+             "height:var(--badge9)!important}")
+    for k, o2 in enumerate(lst):
+        o.append(f'  #s{n} .sh.tx[data-name="{esc(o2["name"])}"]{{'
+                 "left:var(--edge9)!important;")
+        o.append(f"    top:calc(var(--desc-top) + {k}.5 * var(--line)"
+                 " - var(--badge9) / 2)!important}")
+    for o2 in on_photo:
+        cx, cy = cen(o2)
+        rx = (cx - im["x"]) / im["w"]
+        ry = (cy - im["y"]) / im["h"]
+        o.append(f'  #s{n} .sh.tx[data-name="{esc(o2["name"])}"]{{')
+        o.append(f"    left:calc({rx:.4f} * 100vw"
+                 " - var(--badge9) / 2)!important;")
+        o.append(f"    top:calc({ry:.4f} * var(--photo-h)"
+                 " - var(--badge9) / 2)!important}")
+    o.append(f'  #s{n} .sh.tx[data-name^="Oval"] p.t span'
+             "{font-size:calc(var(--badge9) * 0.46)!important}")
+    return "\n".join(o)
+
+
+
+# Slides 27 and 30: display slides whose body is short. No disc column, so
+# nothing needs a pinned line pitch -- the text can simply FLOW under the
+# bands, which also means the panel grows to its content without being told a
+# height (unlike Group B, where every shape is absolutely positioned).
+HEADER_SLIDES = (27, 30)
+
+
+def header_css(sl, W: float) -> str:
+    n = sl["n"]
+    shapes = sl["shapes"]
+    # A backdrop is a ground for a COMPOSED SPREAD, and there is no spread
+    # left: slide 30's Picture 2 is a washed-out full-canvas plate behind the
+    # real photograph, and as a band of its own it is just a pale rectangle.
+    # HIDDEN, NOT REMOVED -- rule 36: the editor externalises img/video srcs
+    # and addresses them BY INDEX, so deleting an element renumbers every
+    # image after it. `display:none` keeps the element, keeps the index, and
+    # keeps the two breakpoints in step.
+    ims = [sh for sh in shapes if sh["type"] == "image" and not sh.get("backdrop")]
+    hidden_im = [sh for sh in shapes if sh["type"] == "image" and sh.get("backdrop")]
+    dead = [sh for sh in shapes if sh["type"] in ("rect", "line")] + hidden_im
+    fill = next((r.get("fill") for r in dead if r.get("fill")), "#A7C6ED")
+    o = [f"  #s{n}.slide{{align-items:stretch;min-height:100svh}}",
+         f"  #s{n} .canvas{{",
+         "    --edgeH:clamp(18px,5.5vw,30px);",
+         "    --padH:clamp(20px,6vw,34px);",
+         "    --ttlH-fs:clamp(34px,10.5vw,54px);",
+         "    --bodyH-fs:calc(var(--read-x) / var(--x-roboto-condensed));",
+         "    --gapH:clamp(12px,3.4vw,20px);",
+         "    container-type:inline-size;",
+         "    width:100%;height:auto;min-height:100svh;aspect-ratio:auto;",
+         "    display:flex;flex-direction:column;align-items:stretch;",
+         f"    background:{fill};padding:0 0 var(--padH)}}"]
+    # The wash rect and the flanking rules are composition devices for a
+    # spread; there is no spread left. Rule 33: carry the ground (its fill is
+    # the canvas background above), drop the geometry.
+    for r in dead:
+        o.append(f'  #s{n} [data-name="{esc(r["name"])}"]'
+                 "{display:none!important}")
+    if ims:
+        o += [f"  #s{n} .sh.im{{position:relative!important;inset:auto!important;",
+              "    left:auto!important;top:auto!important;",
+              "    width:100%!important;height:auto!important;",
+              "    transform:none!important;flex:0 0 auto;order:1}"]
+        for im in ims:
+            o.append(f'  #s{n} [data-name="{esc(im["name"])}"]'
+                     f"{{aspect-ratio:{im['w'] / im['h']:.4f}}}")
+    # `order` is safe on THIS slide in a way it was not on a plate: there are
+    # no absolutely positioned children left to be re-ranked past (rule 41(v)
+    # bit when badges stayed absolute while images carried an order). Here
+    # every child is a flex item, so order moves layout and paint together.
+    # CENTRE THE TEXT IN WHAT IS LEFT. The panel is min-height:100svh and the
+    # copy on these two slides is short, so top-anchoring left a large dead
+    # band underneath. `margin-top:auto` on the first text shape and
+    # `margin-bottom:auto` on the last split the free space evenly above and
+    # below the group -- the band, if there is one, still sits hard at the
+    # top, because auto margins only consume space the flex line has spare.
+    # `nth-last-child` is counted from the END and is safe HERE specifically:
+    # nothing on this slide is removed from the DOM, only hidden, so the
+    # child indices cannot shift (which is the objection slide 1 raises to
+    # nth-child in general).
+    txs = [sh for sh in shapes if sh["type"] == "text"]
+    o += [f"  #s{n} .sh.tx{{position:static!important;inset:auto!important;",
+          "    left:auto!important;top:auto!important;",
+          "    width:auto!important;height:auto!important;",
+          "    transform:none!important;padding:0!important;",
+          "    flex:0 0 auto;order:2;margin:0 var(--edgeH)}",
+          f'  #s{n} [data-name="Title 1"]{{margin-top:auto!important;'
+          "padding-top:var(--padH)!important}",
+          (f"  #s{n} .canvas > div:nth-last-child"
+           f"({len(shapes) - shapes.index(txs[-1])}){{margin-bottom:auto}}"
+           if txs else ""),
+          f'  #s{n} [data-name="Title 1"] p.t{{text-align:left!important}}',
+          f'  #s{n} [data-name="Title 1"] p.t span{{',
+          "    font-size:var(--ttlH-fs)!important;line-height:1.02!important}",
+          # #002060, not the authored #FFFFFF: white on #A7C6ED is 1.76 and
+          # unreadable, and slide 4 authors ITS reading text navy at 8.68 on
+          # this same panel. Same move as slide 3 -- adopt the deck's own
+          # convention rather than invent a treatment. Title 1 stays white: it
+          # is display type, and slide 4's white title measures the same 1.76.
+          f'  #s{n} [data-name="Subtitle 2"]{{margin-top:var(--gapH)!important}}',
+          f'  #s{n} [data-name="Subtitle 2"] p.t{{text-align:left!important;',
+          "    padding-left:0!important;text-indent:0!important;",
+          "    line-height:1.34!important}",
+          f'  #s{n} [data-name="Subtitle 2"] p.t span{{',
+          "    font-size:var(--bodyH-fs)!important;color:#002060!important}"]
+    return "\n".join(o)
+
+
 def build_css(deck) -> str:
     W, H = deck["w_pt"], deck["h_pt"]
     plate_blocks = "\n\n".join(
         plate_css(sl, W) for sl in deck["slides"] if sl["n"] in PLATE_SLIDES)
+    divider_blocks = "\n\n".join(
+        divider_css(sl, W) for sl in deck["slides"] if sl["n"] in GROUP_B)
+    header_blocks = "\n\n".join(
+        header_css(sl, W) for sl in deck["slides"] if sl["n"] in HEADER_SLIDES)
     bp = dkcss.MOBILE_BP
     band = f"769-{bp}"
     scroll_release = dkcss.mobile_scroll_release("section.slide")
@@ -521,6 +748,24 @@ p.t{{margin:0;line-height:normal}}
    ================================================================== */
 @media (max-width:{bp}px){{
 {scroll_release}
+
+  /* ---- NO SCROLL-SNAP. IT WAS TRIED AND REMOVED. DO NOT RE-ADD. ----
+     mobile_scroll_release above sets `scroll-snap-type:none` deck-wide and
+     that is the final state. An attempt to snap only the five numbered
+     breakers (3, 4, 9, 14, 21) shipped and was pulled after a device check.
+
+     It CAN be scoped -- `scroll-snap-type` is all-or-nothing on the
+     container, but `scroll-snap-align` is per-child, so arming the deck and
+     having every slide opt out except the breakers does target exactly five
+     slides, and the plates correctly had no snap position at all. The scoping
+     was not the problem. The problem is that ANY snap position in the run
+     degrades the whole scroll: `proximity` still re-targets a fling as it
+     passes a breaker, so the photo run stops feeling continuous even on the
+     slides that were never snapped. `mandatory` is worse -- it forbids
+     resting between snap positions at all.
+     The continuous scroll is the point of the plate treatment, and it is
+     worth more than each breaker arriving as a page. Snap stays off for
+     every slide, including 1, 2 and 31. */
 
   /* ==================================================================
      DECK-WIDE READING SIZE -- a target X-HEIGHT, not a target px.
@@ -612,8 +857,32 @@ p.t{{margin:0;line-height:normal}}
      layout at the right coordinates and painting nothing. Keeping
      container-type:size is necessary but not sufficient; the height has
      to be definite as well, or this is inline-size with extra steps. */
-  #s1.slide{{align-items:stretch;min-height:100svh}}
-  #s1 .canvas{{width:100%;height:100svh;aspect-ratio:auto;
+  /* ---- SLIDE 31 RIDES SLIDE 1'S RULES, LITERALLY ----
+     31 is the closing cover and is slide 1 shape for shape AND coordinate for
+     coordinate: same Google Shape;133;p29 (KEY VISUALS / THANK YOU), same
+     134/135 rules, same 12;p2 gradient, same 131;p29 BEAUTY at 13.8889cqw,
+     same Picture 1 lockup at the same box. So it is added to slide 1's
+     SELECTORS rather than given a block of its own -- a copy would be two
+     things to keep in step, and the requirement is that they read identically.
+     ONE difference, and it is a trap: the logo is `Picture 3` on slide 1 and
+     `Picture 2` on slide 31. (Slide 1's `Picture 2` is the off-canvas
+     duplicate at left:153.12%, which is why the names diverge.) That single
+     rule is the only one carrying two different data-names. */
+  /* ---- SLIDE 31 RIDES SLIDE 1'S RULES, LITERALLY ----
+     31 is the closing cover and is slide 1 shape for shape AND coordinate for
+     coordinate: same 133;p29 strap (KEY VISUALS / THANK YOU), same 134/135
+     rules, same 12;p2 gradient, same 131;p29 BEAUTY at 13.8889cqw, same
+     Picture 1 lockup at the same box. So it is added to slide 1's SELECTORS
+     rather than given a block of its own -- a copy would be two things to
+     keep in step, and the requirement is that the two read identically.
+     ONE difference, and it is a trap: the logo is `Picture 3` on slide 1 and
+     `Picture 2` on slide 31 (slide 1's `Picture 2` is the off-canvas
+     duplicate at left:153.12%, which is why the names diverge). That rule is
+     the only one carrying two different data-names. */
+  #s1.slide,
+  #s31.slide{{align-items:stretch;min-height:100svh}}
+  #s1 .canvas,
+  #s31 .canvas{{width:100%;height:100svh;aspect-ratio:auto;
     /* Sized against PANEL width. vw below the breakpoint, the authored
        cqw above -- the property is declared and consumed only in here,
        matching henhouse's --pad, so nothing is left declared-but-dead
@@ -659,7 +928,8 @@ p.t{{margin:0;line-height:normal}}
      what keeps KEY VISUALS legible under it -- this shape paints after
      KEY VISUALS in DOM order and rule 21 forbids fixing that with
      z-index. */
-  #s1 [data-name="Google Shape;12;p2"]{{
+  #s1 [data-name="Google Shape;12;p2"],
+  #s31 [data-name="Google Shape;12;p2"]{{
     left:0!important;top:0!important;right:0!important;bottom:0!important;
     width:100%!important;height:100%!important;transform:none!important}}
 
@@ -667,7 +937,8 @@ p.t{{margin:0;line-height:normal}}
      A media element, so it stays POSITIONED -- the static reflow is for
      the text column. Height comes from the authored aspect (66.20 x
      24.29pt) rather than a second magic number. */
-  #s1 [data-name="Picture 3"]{{
+  #s1 [data-name="Picture 3"],
+  #s31 [data-name="Picture 2"]{{
     left:auto!important;right:var(--edge)!important;
     top:var(--edge)!important;bottom:auto!important;
     width:var(--logo-w)!important;height:auto!important;
@@ -684,7 +955,8 @@ p.t{{margin:0;line-height:normal}}
      --lockup-axis -- so neither needs to know the other's height and
      no wrapper is required: the script's BOTTOM sits on the seam, the
      word's TOP sits on it. */
-  #s1 [data-name="Picture 1"]{{
+  #s1 [data-name="Picture 1"],
+  #s31 [data-name="Picture 1"]{{
     left:50%!important;right:auto!important;
     top:auto!important;
     bottom:calc(100% - var(--lockup-axis) + var(--lockup-gap)/2)!important;
@@ -692,7 +964,8 @@ p.t{{margin:0;line-height:normal}}
     aspect-ratio:352.37/182.52;
     transform:translateX(-50%)!important}}
 
-  #s1 [data-name="Google Shape;131;p29"]{{
+  #s1 [data-name="Google Shape;131;p29"],
+  #s31 [data-name="Google Shape;131;p29"]{{
     left:50%!important;right:auto!important;
     top:calc(var(--lockup-axis) + var(--lockup-gap)/2)!important;
     bottom:auto!important;
@@ -708,13 +981,15 @@ p.t{{margin:0;line-height:normal}}
      ANY width regardless of what the ramp does; overflow-wrap goes back to
      `normal` so the two rules cannot disagree. This is the guarantee -- the
      cap below is what keeps it from needing to overflow. */
-  #s1 [data-name="Google Shape;131;p29"]{{
+  #s1 [data-name="Google Shape;131;p29"],
+  #s31 [data-name="Google Shape;131;p29"]{{
     white-space:nowrap!important;overflow-wrap:normal!important}}
   /* Size only. The authored stack is left exactly as roles.py emits it:
      the face is ground truth and a fallback substitution here was a
      mistake -- it changed WHICH typeface renders whenever Bebas Neue does
      not load, which is the state the reported device is in. */
-  #s1 [data-name="Google Shape;131;p29"] p.t span{{
+  #s1 [data-name="Google Shape;131;p29"] p.t span,
+  #s31 [data-name="Google Shape;131;p29"] p.t span{{
     font-size:var(--beauty-fs)!important}}
 
   /* ---- KEY VISUALS: letterspaced, centred, fixed bottom inset ----
@@ -724,11 +999,13 @@ p.t{{margin:0;line-height:normal}}
      tall one. That is why the lockup gets no top margin -- a fixed
      margin would move the elasticity into the wrong place and strand
      the lockup low on a tall screen. */
-  #s1 [data-name="Google Shape;133;p29"]{{
+  #s1 [data-name="Google Shape;133;p29"],
+  #s31 [data-name="Google Shape;133;p29"]{{
     left:0!important;right:0!important;width:auto!important;
     top:auto!important;bottom:var(--kv-inset)!important;
     height:auto!important;padding:0!important}}
-  #s1 [data-name="Google Shape;133;p29"] p.t span{{
+  #s1 [data-name="Google Shape;133;p29"] p.t span,
+  #s31 [data-name="Google Shape;133;p29"] p.t span{{
     font-size:var(--kv-fs)!important;letter-spacing:.3em!important}}
 
   /* The two flanking rules ride the same bottom inset, offset up by
@@ -736,13 +1013,17 @@ p.t{{margin:0;line-height:normal}}
      and out from centre by --kv-gap (half the set width of the
      letterspaced word plus air). */
   #s1 [data-name="Google Shape;134;p29"],
-  #s1 [data-name="Google Shape;135;p29"]{{
+  #s1 [data-name="Google Shape;135;p29"],
+  #s31 [data-name="Google Shape;134;p29"],
+  #s31 [data-name="Google Shape;135;p29"]{{
     top:auto!important;
     bottom:calc(var(--kv-inset) + 0.42 * var(--kv-fs))!important;
     width:var(--rule-w)!important}}
-  #s1 [data-name="Google Shape;134;p29"]{{
+  #s1 [data-name="Google Shape;134;p29"],
+  #s31 [data-name="Google Shape;134;p29"]{{
     left:auto!important;right:calc(50% + var(--kv-gap))!important}}
-  #s1 [data-name="Google Shape;135;p29"]{{
+  #s1 [data-name="Google Shape;135;p29"],
+  #s31 [data-name="Google Shape;135;p29"]{{
     left:calc(50% + var(--kv-gap))!important;right:auto!important}}
 
   /* ==================================================================
@@ -1197,166 +1478,32 @@ p.t{{margin:0;line-height:normal}}
 {plate_blocks}
 
   /* ==================================================================
-     SLIDE 9 -- GROUP B (4, 9, 14, 21): photo band, text on the blue.
-     Slide 3's ethos, not its layout. The photograph takes a full-bleed band
-     at its OWN authored aspect (0.9260, the authored 52.09% x 100% box), so
-     unlike slide 3 there is no cover-crop and rule 41(t) never arises -- the
-     whole frame shows. Everything else sits below it on the authored blue.
-     Nothing overlays a moving ground; no scrim, no halo.
+     GROUP B (4, 9, 14, 21) -- photo band, text on the authored blue.
+     The rules below are GENERATED by divider_css() from the model, one code
+     path for all four. Slide 9 was hand-built first and is now emitted from
+     here; its measured numbers are unchanged, which is the regression check
+     on the generator.
 
-     NO COLOUR IS CHANGED ON THIS SLIDE, and that is the finding rather than
-     an omission. Slide 3's descriptions went navy because slide 4 authors ITS
-     reading text navy; here the reading text ALREADY IS #002060, measuring
-     8.68 on #A7C6ED. Adopting the sibling's convention means leaving it
-     exactly as authored. Everything else is display or decoration and keeps
-     its authored white by the same rule slide 3's numerals keep theirs:
+     Slide 3's ethos, not its layout: the photograph takes a full-bleed band
+     at its OWN authored aspect, so there is no cover-crop and rule 41(t)
+     never arises. Everything else sits below on the blue. Nothing overlays a
+     moving ground; no scrim, no halo.
+
+     NO COLOUR IS CHANGED ON ANY OF THE FOUR, and that is the finding rather
+     than an omission. Slide 3's descriptions went navy because slide 4
+     authors ITS reading text navy -- and 4, 9, 14 and 21 already do:
          Subtitle 4   #002060   8.68  reading text  -- correct as authored
          Title 3      #FFFFFF   1.76  display type  -- decorative, kept
          TextBox 5    white 50% 1.34  numeral       -- decorative, kept
-         Oval A-H     #FFFFFF on #1665BA  5.83      -- carries its own ground
-     The badges are the same self-grounded disc as Group A's, so they need
-     nothing on any ground.
+         Oval         #FFFFFF on #1665BA  5.83      -- carries its own ground
+     Adopting the sibling's convention here means leaving it alone.
 
-     GROUND: rule 33, carry the ground and drop the geometry. The authored
-     panel is a rect filling the right 50%; on a phone there is no right half,
-     so its FILL becomes the canvas background and the rect itself goes. The
-     colour is the deck's own #A7C6ED, not a chosen one.
-
-     THE BOXES ARE RE-LAID, NOT RESIZED. The earlier headroom table put this
-     slide's description at 4.92px maximum inside its authored box against the
-     16.83px the deck's reading size asks for -- 0.29x, no headroom at all. So
-     the text block is rebuilt from the top rather than scaled: every offset
-     below is arithmetic from the band, and nothing depends on flow.
+     The panel rect is hidden and its fill becomes the canvas background --
+     rule 33, carry the ground and drop the geometry.
      ================================================================== */
-  #s9.slide{{align-items:stretch;min-height:100svh}}
-  #s9 .canvas{{
-    --edge9:clamp(16px,5vw,26px);
-    --pad9:clamp(18px,5vw,28px);
-    --gutter9:clamp(8px,2.4vw,12px);
-    --photo-h:calc(100vw / 0.9260);
-    --num-fs:clamp(28px,8.4vw,40px);
-    --ttl-fs:clamp(30px,9.2vw,44px);
-    --desc-fs:calc(var(--read-x) / var(--x-roboto-condensed));
-    --badge9:clamp(18px,5.4vw,24px);
-    --gap1:clamp(8px,2.4vw,14px);
-    --gap2:clamp(14px,4vw,22px);
-    /* The badge pitch IS the line pitch -- one disc per description line, as
-       authored (8 paragraphs, 8 discs, a 21.863pt pitch on the canvas). They
-       are driven by the same --line so they cannot drift apart. */
-    --line:calc(var(--desc-fs) * 1.62);
-    --num-top:calc(var(--photo-h) + var(--pad9));
-    --ttl-top:calc(var(--num-top) + var(--num-fs) + var(--gap1));
-    --desc-top:calc(var(--ttl-top) + var(--ttl-fs) * 1.02 + var(--gap2));
-    /* THE PANEL MUST BE TOLD ITS OWN HEIGHT. Every shape on this slide is
-       absolutely positioned, and an absolutely positioned child contributes
-       NOTHING to its parent's height -- so `height:auto` leaves the canvas at
-       exactly `min-height:100svh` no matter how far the content runs, and
-       `.canvas{{overflow:hidden}}` then clips whatever is past it. On a 440px
-       iPhone the eighth list row fell outside that box: H invisible, G half
-       cut, and unreachable because the panel had no height to scroll into.
-       --content-h is the real bottom of the content, from the same terms that
-       place it, and max() keeps 100svh as a FLOOR rather than a ceiling.
-       Mode B means the panel grows to its content; that only happens if the
-       content is in flow OR the height is stated, and here it is stated. */
-    --content-h:calc(var(--desc-top) + 8 * var(--line) + var(--pad9));
-    container-type:inline-size;
-    width:100%;height:auto;aspect-ratio:auto;
-    min-height:max(100svh,var(--content-h));
-    background:#A7C6ED;padding:0}}
-  #s9 [data-name="Google Shape;37;p9"]{{display:none!important}}
+{divider_blocks}
 
-  /* the band: authored aspect, so the crop's srcRect percentages stay valid
-     and `.cropw` keeps this shape as its positioned ancestor (rule 41(u)). */
-  #s9 [data-name="Picture 7"]{{
-    left:0!important;right:0!important;top:0!important;bottom:auto!important;
-    width:auto!important;height:var(--photo-h)!important}}
-
-  /* every text shape is placed by arithmetic, not flow */
-  #s9 .sh.tx{{right:auto!important;bottom:auto!important;
-    width:auto!important;height:auto!important;padding:0!important}}
-  #s9 [data-name="TextBox 5"]{{
-    left:var(--edge9)!important;top:var(--num-top)!important}}
-  #s9 [data-name="TextBox 5"] p.t span{{
-    font-size:var(--num-fs)!important;line-height:1!important}}
-  /* rule 41(r): display type, one line, no mid-word break */
-  #s9 [data-name="Title 3"]{{
-    left:var(--edge9)!important;top:var(--ttl-top)!important;
-    white-space:nowrap!important;overflow-wrap:normal!important}}
-  #s9 [data-name="Title 3"] p.t span{{
-    font-size:var(--ttl-fs)!important;line-height:1.02!important}}
-
-  /* the description: one line per paragraph, pinned, so the disc column
-     cannot fall out of step with it. Measured at the reading size the longest
-     line is 192.3px ("Harsh lighting & shadow play") in a column of roughly
-     310px, so nowrap costs nothing and buys the alignment guarantee -- and if
-     a future line did outgrow the column it would overflow visibly rather
-     than wrap and silently shift every disc below it. `line-height` is a
-     LENGTH, not a ratio, because p.t carries font-size:0 from the strut fix
-     (rule 41(s)) and a ratio would resolve against zero. */
-  #s9 [data-name="Subtitle 4"]{{
-    left:calc(var(--edge9) + var(--badge9) + var(--gutter9))!important;
-    top:var(--desc-top)!important}}
-  /* `height`, not only `line-height`. Measured: with line-height:27.27px the
-     paragraph box still came out 32.77px, because the line box takes the
-     font's own ascent+descent when those exceed the declared leading -- so
-     the discs drifted -5.5px per row, reaching -46px by the eighth. Setting
-     the box height to the same --line makes the pitch exact BY CONSTRUCTION
-     rather than by prediction: the disc column and the text column are then
-     two readings of one variable and cannot disagree. */
-  #s9 [data-name="Subtitle 4"] p.t{{
-    height:var(--line)!important;overflow:visible;
-    line-height:var(--line)!important;text-align:left!important;
-    padding-left:0!important;text-indent:0!important;
-    white-space:nowrap!important;overflow-wrap:normal!important}}
-  #s9 [data-name="Subtitle 4"] p.t span{{font-size:var(--desc-fs)!important}}
-
-  /* the A-H discs, one per line, on the same --line pitch.
-     Selectors carry `.sh.tx` because `#s9 .sh.tx` above sets
-     `height:auto!important` at (1,2,0) while a bare attribute selector is
-     (1,1,0): both !important, so specificity decides, and the discs rendered
-     11.6px instead of 21.1px and sat a constant 4.77px above their lines.
-     Third time on this deck (slide 3's header, slide 13's images):
-     !important settles importance, not rank. */
-  #s9 .sh.tx[data-name="Oval 9"],#s9 .sh.tx[data-name="Oval 10"],
-  #s9 .sh.tx[data-name="Oval 11"],#s9 .sh.tx[data-name="Oval 12"],
-  #s9 .sh.tx[data-name="Oval 13"],#s9 .sh.tx[data-name="Oval 14"],
-  #s9 .sh.tx[data-name="Oval 15"],#s9 .sh.tx[data-name="Oval 16"],
-  #s9 .sh.tx[data-name="Oval 17"],#s9 .sh.tx[data-name="Oval 1"]{{
-    width:var(--badge9)!important;height:var(--badge9)!important}}
-  #s9 .sh.tx[data-name="Oval 9"],#s9 .sh.tx[data-name="Oval 10"],
-  #s9 .sh.tx[data-name="Oval 11"],#s9 .sh.tx[data-name="Oval 12"],
-  #s9 .sh.tx[data-name="Oval 13"],#s9 .sh.tx[data-name="Oval 14"],
-  #s9 .sh.tx[data-name="Oval 15"],#s9 .sh.tx[data-name="Oval 16"]{{
-    left:var(--edge9)!important}}
-  #s9 .sh.tx[data-name="Oval 9"]{{top:calc(var(--desc-top) + 0.5 * var(--line)
-    - var(--badge9) / 2)!important}}
-  #s9 .sh.tx[data-name="Oval 10"]{{top:calc(var(--desc-top) + 1.5 * var(--line)
-    - var(--badge9) / 2)!important}}
-  #s9 .sh.tx[data-name="Oval 11"]{{top:calc(var(--desc-top) + 2.5 * var(--line)
-    - var(--badge9) / 2)!important}}
-  #s9 .sh.tx[data-name="Oval 12"]{{top:calc(var(--desc-top) + 3.5 * var(--line)
-    - var(--badge9) / 2)!important}}
-  #s9 .sh.tx[data-name="Oval 13"]{{top:calc(var(--desc-top) + 4.5 * var(--line)
-    - var(--badge9) / 2)!important}}
-  #s9 .sh.tx[data-name="Oval 14"]{{top:calc(var(--desc-top) + 5.5 * var(--line)
-    - var(--badge9) / 2)!important}}
-  #s9 .sh.tx[data-name="Oval 15"]{{top:calc(var(--desc-top) + 6.5 * var(--line)
-    - var(--badge9) / 2)!important}}
-  #s9 .sh.tx[data-name="Oval 16"]{{top:calc(var(--desc-top) + 7.5 * var(--line)
-    - var(--badge9) / 2)!important}}
-
-  /* the two discs that live ON the photograph travel with it, written as
-     their authored fraction of the photo box (rule 41(v)'s companion: they
-     are absolute over an absolute band, DOM-later, so they paint above it
-     without a z-index). */
-  #s9 .sh.tx[data-name="Oval 17"]{{
-    left:calc(0.0979 * 100vw - var(--badge9) / 2)!important;
-    top:calc(0.0813 * var(--photo-h) - var(--badge9) / 2)!important}}
-  #s9 .sh.tx[data-name="Oval 1"]{{
-    left:calc(0.1517 * 100vw - var(--badge9) / 2)!important;
-    top:calc(0.0813 * var(--photo-h) - var(--badge9) / 2)!important}}
-  #s9 .sh.tx[data-name^="Oval"] p.t span{{
-    font-size:calc(var(--badge9) * 0.46)!important}}
+{header_blocks}
 
 }}
 """
