@@ -212,6 +212,23 @@ DASH_CSS = {"solid": "solid",
             "sysDashDotDot": "dashed"}
 
 
+def nm(sh) -> str:
+    """A stable selector hook for the mobile block.
+
+    The mobile reflow has to address INDIVIDUAL shapes -- slide 1's lockup is
+    two specific siblings out of eight -- and the only alternatives were
+    `nth-child`, which renumbers the moment a shape is suppressed, or a new
+    wrapper, which is forbidden: grouping wrappers may not go inside a
+    harvested column, and the editor addresses images and text by INDEX, so
+    inserting an element would silently repoint every edit after it.
+
+    An attribute on the element that is already there changes neither the
+    child order nor the harvest index. Shape names come from the source deck
+    and are unique within a slide.
+    """
+    return f' data-name="{esc(sh.get("name", ""))}"'
+
+
 def shape_html(sh, man, W, H) -> str:
     t = sh.get("type")
     style = box_style(sh, W, H)
@@ -224,7 +241,7 @@ def shape_html(sh, man, W, H) -> str:
         alt = esc(sh.get("name", ""))
         inner = crop_img(sh, src, alt) if sh.get("crop") else f'<img src="{src}" alt="{alt}">'
         cls = "sh im cropped" if sh.get("crop") else "sh im"
-        return f'<div class="{cls}" style="{style}">{inner}</div>'
+        return f'<div class="{cls}"{nm(sh)} style="{style}">{inner}</div>'
 
     if t == "video":
         v = man["videos"].get(sh.get("video"))
@@ -238,7 +255,7 @@ def shape_html(sh, man, W, H) -> str:
         # dkcss.media_box_reserve(); desktop sizes from the authored box.
         under = (f'<img class="poster" src="{poster}" alt="" aria-hidden="true">'
                  if poster else "")
-        return (f'<div class="sh vid" style="{style};--ar:{v["aspect"]}">{under}'
+        return (f'<div class="sh vid"{nm(sh)} style="{style};--ar:{v["aspect"]}">{under}'
                 f'<video src="assets/{v["out"]}"'
                 f'{f" poster={chr(34)}{poster}{chr(34)}" if poster else ""}'
                 f' preload="none" muted loop playsinline></video></div>')
@@ -264,7 +281,7 @@ def shape_html(sh, man, W, H) -> str:
                 f"border-top:{w_pt / H * 100:.4f}cqh "
                 f"{DASH_CSS.get(st.get('dash'), 'solid')} "
                 f"{rgba(st.get('hex', '#000000'), st.get('alpha'))}"]
-        return f'<div class="sh ln" style="{";".join(bits)}"></div>'
+        return f'<div class="sh ln"{nm(sh)} style="{";".join(bits)}"></div>'
 
     if t in ("text", "rect"):
         bits = [style]
@@ -306,13 +323,16 @@ def shape_html(sh, man, W, H) -> str:
         if sh.get("wrap") == "none":
             bits.append("white-space:nowrap")
         paras = "".join(para_html(p, W) for p in (sh.get("paras") or []))
-        return f'<div class="sh tx" style="{";".join(bits)}">{paras}</div>'
+        return f'<div class="sh tx"{nm(sh)} style="{";".join(bits)}">{paras}</div>'
 
     return ""
 
 
 def build_css(deck) -> str:
     W, H = deck["w_pt"], deck["h_pt"]
+    bp = dkcss.MOBILE_BP
+    band = f"769-{bp}"
+    scroll_release = dkcss.mobile_scroll_release("section.slide")
     return f"""{dkcss.ratio_root(W, H)}
 :root{{--deck-font:{roles.BODY_STACK};--display-font:{roles.DISPLAY_STACK}}}
 *{{box-sizing:border-box}}
@@ -356,6 +376,172 @@ section.slide{{scroll-snap-align:start;scroll-snap-stop:always;
    constant's 1.21172, so a 96pt title's line box moves 116.5pt -> 115.0pt.
    The collisions are authored overflow and this barely touches them. */
 p.t{{margin:0;line-height:normal}}
+
+/* ==================================================================
+   MOBILE -- same DOM, no second .slide tree, no duplicated media.
+   Gated on dkcss.MOBILE_BP ({bp}px), the shared constant. NOT 768:
+   css.py records that 768 is the drift value behind the Patchology
+   767/768 sliver, and mobile_scroll_release() below documents that it
+   belongs inside the MOBILE_BP block. A deck-local breakpoint would
+   leave deck 10 on desktop across {band}px while every sibling reflowed.
+
+   Slide 1 only, so far. Everything is scoped to #s1; slides 2-31 keep
+   their desktop canvas untouched below the breakpoint until each is
+   done in its own pass.
+   ================================================================== */
+@media (max-width:{bp}px){{
+{scroll_release}
+
+  /* ---- the panel: full height, no letterbox ----
+     Desktop fits the canvas to the authored aspect, which on a phone
+     leaves a dark band top and bottom. Below the breakpoint the canvas
+     takes the whole viewport and the aspect goes; `container-type:size`
+     is KEPT (henhouse switches to inline-size) because this deck writes
+     vertical insets and stroke weights in `cqh`, which is invalid
+     without a block axis -- switching would silently drop every padding
+     and every rule weight in the deck.
+
+     `height:100svh`, NOT `height:auto;min-height:100svh`. Measured: with
+     auto+min-height the box still COMPUTES to 844px on a 390x844 probe,
+     but the block axis is not DEFINITE, so container-query units against
+     it resolve to zero -- `100cqh` measured 0px and the flanking rules'
+     `border-top:0.1852cqh` computed to `0px`, i.e. they were in the
+     layout at the right coordinates and painting nothing. Keeping
+     container-type:size is necessary but not sufficient; the height has
+     to be definite as well, or this is inline-size with extra steps. */
+  #s1.slide{{align-items:stretch;min-height:100svh}}
+  #s1 .canvas{{width:100%;height:100svh;aspect-ratio:auto;
+    /* Sized against PANEL width. vw below the breakpoint, the authored
+       cqw above -- the property is declared and consumed only in here,
+       matching henhouse's --pad, so nothing is left declared-but-dead
+       on desktop. Below the breakpoint the panel IS the viewport, so
+       1vw and 1cqw are the same length; vw is written because the
+       clamps also need a unit that survives the canvas going auto. */
+    --edge:clamp(14px,4.5vw,26px);
+    --logo-w:clamp(52px,14vw,88px);
+    --script-w:min(70vw,400px);
+    /* THE WORDMARK IS DERIVED FROM ITS BOX, NOT FROM A RAMP.
+       Two rounds of vw tuning failed because a font-size ramp only fixes
+       the TYPE SIZE; the RENDERED WIDTH is the type size times the face's
+       set width, and that second factor is not ours. Measured width of
+       "BEAUTY" per 1px of font-size: Bebas Neue 2.328, Roboto Condensed
+       3.227 (+38.6%), Helvetica/Arial 4.001 (+71.9%). At the old capped
+       120.4px that is 280.3px, 388.5px and 481.7px for the same slide --
+       so a ramp tuned on Bebas overflows a 440px canvas by 41.7px the
+       moment the deck falls back, which is the reported clip.
+       Inverting it removes the guesswork: pick the width we want the word
+       to occupy -- 90% of the lockup box, i.e. --beauty-fit -- and divide
+       by the set-width ratio to get the type size. Rendered width is then
+       0.90 x --script-w at EVERY width by construction, the same way
+       Picture 1 fills its box by being 100% of it rather than by being
+       given a size that happens to land there. */
+    --beauty-ratio:2.328;
+    --beauty-fit:0.90;
+    --beauty-fs:calc(var(--script-w) * var(--beauty-fit) / var(--beauty-ratio));
+    --kv-fs:clamp(11px,3.2vw,15px);
+    --kv-inset:clamp(22px,7vw,44px);
+    --kv-gap:clamp(52px,17vw,78px);
+    --rule-w:clamp(26px,8vw,48px);
+    /* The seam the lockup hangs off. Below 50% = above centre: an
+       optically centred lockup reads as sunk on a tall phone because
+       the eye weights the KEY VISUALS block at the bottom. */
+    --lockup-axis:41%;
+    --lockup-gap:clamp(6px,2vw,14px)}}
+
+  /* ---- gradient: edge to edge, full height ----
+     Authored as a 100% x 69.48% rect with a 359.994deg rotation. The
+     rotation is a rounding artefact of the source and visibly shears a
+     full-height box, so it goes. The gradient function itself is inline
+     and untouched: its 0deg stop is transparent at the BOTTOM, which is
+     what keeps KEY VISUALS legible under it -- this shape paints after
+     KEY VISUALS in DOM order and rule 21 forbids fixing that with
+     z-index. */
+  #s1 [data-name="Google Shape;12;p2"]{{
+    left:0!important;top:0!important;right:0!important;bottom:0!important;
+    width:100%!important;height:100%!important;transform:none!important}}
+
+  /* ---- logo: small, top right ----
+     A media element, so it stays POSITIONED -- the static reflow is for
+     the text column. Height comes from the authored aspect (66.20 x
+     24.29pt) rather than a second magic number. */
+  #s1 [data-name="Picture 3"]{{
+    left:auto!important;right:var(--edge)!important;
+    top:var(--edge)!important;bottom:auto!important;
+    width:var(--logo-w)!important;height:auto!important;
+    aspect-ratio:66.20/24.29}}
+
+  /* Picture 2 is the same asset authored at left:153.12% -- off-canvas
+     in the source. It is left exactly where it is: `overflow:hidden` on
+     the canvas already clips it, and it is NOT hidden, because removing
+     an authored shape from the mobile view would put the two breakpoints
+     out of sync for the editor, which addresses images by index. */
+
+  /* ---- the lockup: script over BEAUTY, centred ----
+     Side by side on desktop. Both halves hang off one seam --
+     --lockup-axis -- so neither needs to know the other's height and
+     no wrapper is required: the script's BOTTOM sits on the seam, the
+     word's TOP sits on it. */
+  #s1 [data-name="Picture 1"]{{
+    left:50%!important;right:auto!important;
+    top:auto!important;
+    bottom:calc(100% - var(--lockup-axis) + var(--lockup-gap)/2)!important;
+    width:var(--script-w)!important;height:auto!important;
+    aspect-ratio:352.37/182.52;
+    transform:translateX(-50%)!important}}
+
+  #s1 [data-name="Google Shape;131;p29"]{{
+    left:50%!important;right:auto!important;
+    top:calc(var(--lockup-axis) + var(--lockup-gap)/2)!important;
+    bottom:auto!important;
+    width:var(--script-w)!important;height:auto!important;
+    padding:0!important;transform:translateX(-50%)!important}}
+  /* A WORDMARK IS ONE WORD. build_css sets `.sh.tx{{overflow-wrap:anywhere}}`
+     deck-wide because OOXML wrap="square" means break AT THE BOX EDGE, mid-word
+     if a token does not fit -- correct for the authored body copy, fatal here:
+     it converts "the box is 1px too narrow" into "BEA / UTY" rather than into
+     an overflow anyone would see in review. Reported on iPhone 17 Pro Max
+     (440 CSS px), which is the first width above the 430 this was tuned at.
+     `nowrap` removes every break opportunity, so the wordmark cannot split at
+     ANY width regardless of what the ramp does; overflow-wrap goes back to
+     `normal` so the two rules cannot disagree. This is the guarantee -- the
+     cap below is what keeps it from needing to overflow. */
+  #s1 [data-name="Google Shape;131;p29"]{{
+    white-space:nowrap!important;overflow-wrap:normal!important}}
+  /* Size only. The authored stack is left exactly as roles.py emits it:
+     the face is ground truth and a fallback substitution here was a
+     mistake -- it changed WHICH typeface renders whenever Bebas Neue does
+     not load, which is the state the reported device is in. */
+  #s1 [data-name="Google Shape;131;p29"] p.t span{{
+    font-size:var(--beauty-fs)!important}}
+
+  /* ---- KEY VISUALS: letterspaced, centred, fixed bottom inset ----
+     Anchored to the BOTTOM, while the lockup is anchored near the top.
+     The gap between them is therefore the only elastic dimension on the
+     slide: it absorbs the whole difference between a short phone and a
+     tall one. That is why the lockup gets no top margin -- a fixed
+     margin would move the elasticity into the wrong place and strand
+     the lockup low on a tall screen. */
+  #s1 [data-name="Google Shape;133;p29"]{{
+    left:0!important;right:0!important;width:auto!important;
+    top:auto!important;bottom:var(--kv-inset)!important;
+    height:auto!important;padding:0!important}}
+  #s1 [data-name="Google Shape;133;p29"] p.t span{{
+    font-size:var(--kv-fs)!important;letter-spacing:.3em!important}}
+
+  /* The two flanking rules ride the same bottom inset, offset up by
+     roughly half a cap height so they sit on the text's optical midline,
+     and out from centre by --kv-gap (half the set width of the
+     letterspaced word plus air). */
+  #s1 [data-name="Google Shape;134;p29"],
+  #s1 [data-name="Google Shape;135;p29"]{{
+    top:auto!important;
+    bottom:calc(var(--kv-inset) + 0.42 * var(--kv-fs))!important;
+    width:var(--rule-w)!important}}
+  #s1 [data-name="Google Shape;134;p29"]{{
+    left:auto!important;right:calc(50% + var(--kv-gap))!important}}
+  #s1 [data-name="Google Shape;135;p29"]{{
+    left:calc(50% + var(--kv-gap))!important;right:auto!important}}
+}}
 """
 
 
