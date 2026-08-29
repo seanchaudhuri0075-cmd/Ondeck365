@@ -430,6 +430,41 @@ p.t{{margin:0;line-height:normal}}
     --x-darker-grotesque:0.4040;
     --x-roboto-condensed:0.5283}}
 
+  /* ==================================================================
+     THE LINE-BOX STRUT -- rule 41(s).
+     `p.t` carries a unitless line-height but NO font-size of its own, so
+     its strut is computed against the 16px it inherits from `body`: a
+     FIXED PIXEL leading that does not scale with the canvas, sitting under
+     text that does. A line box is the taller of the strut and its inline
+     content, so whichever is larger silently takes over.
+
+     Above the breakpoint the cqw text is the larger of the two and wins,
+     which is why this never appeared in desktop review. Below it the canvas
+     shrinks, every cqw size drops under 16px, and the STRUT wins on every
+     paragraph in the deck. Measured on slide 4 at 390: eight paragraphs of
+     39.94px each instead of 12.16px -- 320px of ink on a 219px canvas,
+     text running clean off the slide. Setting `p.t{{font-size:4.875px}}`,
+     the size of its own span, returned it to 12.16px, which is the proof.
+
+     `font-size:0` collapses the strut to nothing so the line box is decided
+     by the spans that actually carry the text. Checked before writing it:
+     all 149 paragraphs put their text inside spans, none is empty, no `<br>`
+     stands without content beside it, and no two spans are separated by
+     whitespace that a zero font-size would collapse -- so no line box loses
+     its only content. The one `em` length in the deck (`letter-spacing:.3em`)
+     sits on a span and resolves against the span's own size.
+
+     SCOPE: this is inside the breakpoint, so the standing test still holds.
+     THE SAME DEFECT IS STILL LIVE ON DESKTOP between the breakpoint and the
+     width at which each run outgrows the strut -- for slide 4's 1.25cqw runs
+     at line-height 2.4961 that is a canvas width of 39.94 / (0.0125 x
+     2.4961) = 1280px, so 820-1280px is unfixed. Fixing it there means
+     emitting a font-size on `p.t` from the paragraph's own runs, which
+     changes the desktop build and moves the standing test's baseline. That
+     is a separate change and is NOT made here.
+     ================================================================== */
+  .sh.tx p.t{{font-size:0}}
+
   /* ---- the panel: full height, no letterbox ----
      Desktop fits the canvas to the authored aspect, which on a phone
      leaves a dark band top and bottom. Below the breakpoint the canvas
