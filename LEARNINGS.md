@@ -1330,8 +1330,8 @@ Decks referenced: **Wheeber**, **FrameTag**, **Global ImAIge** (Global Image Fac
 
 ## 41. OOXML properties that do not survive a naive CSS translation — and the method traps that hide them
 
-Deck 10 (Secret) surfaced six of these in one build (a)-(f), then twelve more
-across later builds (g)-(r). They are grouped because they share a shape: **a
+Deck 10 (Secret) surfaced six of these in one build (a)-(f), then thirteen more
+across later builds (g)-(s). They are grouped because they share a shape: **a
 property the source states plainly, that the renderer either never reads or
 translates into a CSS construct with different semantics.** Each was invisible
 in code review and each produced output that looked deliberate.
@@ -1340,8 +1340,9 @@ in code review and each produced output that looked deliberate.
 titled for. (g)-(k) extend that to the inheritance chain those properties
 travel down; (l) is a PICTURE FILL property and is here because it fails the
 same way; (m)-(q) are the METHOD traps that let the rest survive review; (r)
-returns to (a)'s territory, where the deck-wide default hides. The heading
-widened rather than splitting because the lesson is one lesson.
+returns to (a)'s territory, where the deck-wide default hides, and (s) is (m)
+again with the wrong basis rather than the wrong unit. The heading widened
+rather than splitting because the lesson is one lesson.
 
 ### (a) `wrap="none"` must emit `white-space:nowrap`
 
@@ -1690,6 +1691,52 @@ overflow.
   out. *Assertion:* for every shape classed as display type, assert the
   computed `overflow-wrap` is not `anywhere`; and assert its rendered width
   against the box at more than one viewport, per (a).
+
+### (s) A block with no `font-size` still has a LINE-BOX STRUT, and the strut is sized from what it inherited
+
+- **Symptom** — below the breakpoint every paragraph in the deck froze at one
+  leading. Slide 4's eight paragraphs measured **39.94px each instead of
+  12.16px**: 320px of ink inside a 98px box on a 219px canvas, text running
+  clean off the slide. Desktop was correct. Nothing in the emitted CSS was
+  wrong to read: the paragraph carried `line-height:2.4961`, a unitless ratio,
+  exactly as authored.
+- **Root cause** — `p.t` carries that ratio but **no `font-size` of its own**,
+  so it inherits 16px from `body`, and a unitless line-height resolves against
+  the element's OWN size: strut = 2.4961 x 16px = 39.94px, a fixed pixel
+  leading sitting under text sized in `cqw`. A line box is the taller of the
+  strut and its inline content, so the two swap places at a threshold. Above
+  the breakpoint the `cqw` text is larger and wins -- which is why two rounds
+  of desktop review and a device pass never saw it. Below it, every `cqw` size
+  falls under 16px and the STRUT wins on all 149 paragraphs.
+- **This is (m) in a third form.** (m) was vertical geometry in the wrong
+  UNIT; this is vertical geometry with the wrong BASIS. Both produce a
+  declaration that is correct where it was written and silently changes
+  meaning somewhere else, and both were invisible in code review because the
+  declaration you read is not the one that computes.
+- **Rule** — a block that sets `line-height` must also set the `font-size`
+  that ratio is meant to resolve against, or collapse its strut so the inline
+  content decides. *Assertion:* for every text block carrying a unitless
+  `line-height`, assert its computed `font-size` is either 0 or equal to the
+  size of the runs it contains; a block inheriting a viewport-independent
+  size while its children scale is the defect.
+- **The fix that was applied, and its limit.** `.sh.tx p.t{font-size:0}`,
+  inside the breakpoint. Collapsing to zero is safe only against a checked
+  precondition, and it was checked: all 149 paragraphs put their text inside
+  spans, none is empty, no `<br>` stands without content beside it, no two
+  spans are separated by collapsible whitespace, and the deck's only `em`
+  length sits on a span. **The same defect is still live ABOVE the
+  breakpoint**, between 820px and the width at which each run outgrows the
+  strut -- for slide 4's 1.25cqw runs that is a canvas width of
+  `39.94 / (0.0125 x 2.4961) = 1280px`, so 820-1280px is unfixed. Fixing it
+  there means emitting a `font-size` on `p.t` from the paragraph's own runs,
+  which changes the desktop build.
+- **A phantom strut also inflates a box that HUGS its text.** Slide 1's KEY
+  VISUALS is `height:auto` and bottom-anchored: the strut had been padding it
+  to 19.38px around a 15.12px line. Removing it moved the text's midline down
+  0.77px and left the flanking rules where they were, which tightened their
+  offset from the midline from 1.89px to 1.12px. Small, and an improvement --
+  but it is the general shape of the risk: **anything measured against a box
+  that was carrying phantom leading was measured against the wrong box.**
 
 - **Proven by** — Deck 10 (Secret), 2026-08-27/28.
 
