@@ -1024,6 +1024,111 @@ p.t{{margin:0;line-height:normal}}
   #s3 [data-name="Google Shape;155;p31"] p.t span,
   #s3 [data-name="Google Shape;158;p31"] p.t span,
   #s3 [data-name="Google Shape;159;p31"] p.t span{{font-size:var(--desc-fs)!important}}
+
+  /* ==================================================================
+     SLIDE 13 -- GROUP A pattern: EACH IMAGE IS ITS OWN FULL-BLEED PLATE.
+     Group A (10, 12, 13, 16, 17, 22, 23, 25, 26) is BLANK-layout with no
+     title, no description and no prose: one to three photographs plus Oval
+     badges carrying a single letter. Slide 3's shape does not transfer --
+     there is no reading text to move onto the blue -- but its PRINCIPLE does:
+     let the photograph read at full strength, and adopt what a sibling
+     already solves rather than inventing a treatment. The badge is
+     `border-radius:50%;background:#1665BA` with a white glyph, i.e. it
+     CARRIES ITS OWN GROUND (5.83 against that fill on any photograph). That
+     is the thing the slide 3 scrim and halos both failed at, already solved
+     in the authored file. So nothing is added here: no scrim, no halo, no
+     recolour.
+
+     THE MULTI-IMAGE COMPOSITION IS NOT PRESERVED AS A UNIT. Two images
+     become two plates, three become three, each edge to edge and stacked.
+     That also settles slide 26: three images is three plates, not a Group D
+     screen-break question.
+
+     PANEL MODEL -- these are NOT viewport-height panels.
+     `min-height:0` on both the section and the canvas, deliberately, against
+     the deck-wide `section.slide{{min-height:100svh}}`. A plate is exactly as
+     tall as its own photograph: slide 23's single 1:1 image would otherwise
+     sit in a 844px box with 454px of dead ground under it, and the run of
+     plates would read as a series of viewport pages rather than one
+     continuous scroll. Height comes from the image and nothing else.
+
+     SCROLL-SNAP IS OFF ENTIRELY, NOT PROXIMITY, and it already is: deckkit's
+     mobile_scroll_release sets `#deck{{scroll-snap-type:none}}` for the whole
+     deck below the breakpoint. That is the correct setting here rather than
+     something to revisit -- `proximity` would still re-target a fling toward
+     a slide edge, and with plates of unequal height and no viewport-height
+     floor there is no meaningful page boundary to snap TO. The authored
+     `scroll-snap-align:start` stays on the section and is inert without a
+     snap container, exactly as mobile_scroll_release documents.
+     ================================================================== */
+  #s13.slide{{align-items:stretch;min-height:0;justify-content:flex-start}}
+  #s13 .canvas{{
+    /* Every plate is the full viewport width; no edge, no column, no inset.
+       The authored 1.60% left and 2.53% top insets go with the bleed. */
+    --plate:100vw;
+    --badge:clamp(20px,6.2vw,28px);
+    /* authored aspects: 460.82x384.61 and 224.86x384.82 */
+    --ar1:1.1982;
+    --ar2:0.5843;
+    --h1:calc(var(--plate) / var(--ar1));
+    --h2:calc(var(--plate) / var(--ar2));
+    /* NO GAP. The authored file has none to carry: the two images are side by
+       side at the SAME y (10.25..394.86 and 10.03..394.86), so their 11.07pt
+       separation is a horizontal gutter and does not survive being stacked.
+       A vertical gap here would be invented, so --top2 is just --h1. */
+    --top1:0px;
+    --top2:var(--h1);
+    container-type:inline-size;
+    width:100%;height:auto;min-height:0;aspect-ratio:auto;
+    display:flex;flex-direction:column;align-items:stretch;
+    padding:0}}
+
+  /* `position:relative`, NOT `static` -- rule 41(u). `.cropw` is
+     `position:absolute;inset:0` and resolves against the nearest POSITIONED
+     ancestor, so a static image stops being that ancestor and the wrapper
+     binds to the canvas instead. Measured on the first build: `.cropw` came
+     out 960.3px tall inside a 299.5px image box, and `overflow:hidden` on
+     `.sh.im` did not clip it, because a static ancestor does not clip an
+     absolutely positioned descendant whose containing block is further up.
+     The photograph painted across the whole slide. `relative` keeps the shape
+     in flow AND keeps it the containing block.
+     The authored aspect is equally load-bearing: the img inside `.cropw` is
+     placed by srcRect PERCENTAGES, which are only correct while the box keeps
+     the ratio they were computed against (rule 22(a), rule 31). */
+  #s13 .sh.im{{position:relative!important;inset:auto!important;
+    left:auto!important;top:auto!important;
+    width:100%!important;height:auto!important;
+    transform:none!important;flex:0 0 auto}}
+  /* NO `order` -- rule 41(v). The DOM is already in the right sequence, so it
+     buys no layout, and it costs paint order: flex items paint in
+     ORDER-MODIFIED document order while the absolutely positioned badges are
+     not flex items and keep raw document order. With order:1 / order:2 here
+     the images were re-sequenced past the badges and the blue discs did not
+     render at all. Setting order:9 on the badges did not help, because order
+     does not apply to them. Removing it restored the badges with the layout
+     bit for bit unchanged. z-index would be forbidden anyway (rule 21). */
+  #s13 [data-name="Picture 2"]{{aspect-ratio:var(--ar1)}}
+  #s13 [data-name="Picture 4"]{{aspect-ratio:var(--ar2)}}
+
+  /* Each badge belongs to ONE image and travels with it. It cannot be
+     positioned against that image -- a sibling, and a wrapper is forbidden --
+     but it does not need to be: each plate's box is arithmetic, so the badge
+     is written as its authored FRACTION OF ITS OWN HOST.
+         Oval 1 'E'  94.17% x 91.40% of Picture 2
+         Oval 3 'B'   9.65% x 22.04% of Picture 4
+     The fractions are invariant; the pixels are not. The host box just went
+     from a 359px column to the full 100vw plate, and because both the left
+     and the top terms are expressed against --plate and --hN, they follow it
+     without being retyped. */
+  #s13 .sh.tx{{width:var(--badge)!important;height:var(--badge)!important;
+    padding:0!important;right:auto!important;bottom:auto!important}}
+  #s13 [data-name="Oval 1"]{{
+    left:calc(0.9417 * var(--plate) - var(--badge) / 2)!important;
+    top:calc(var(--top1) + 0.9140 * var(--h1) - var(--badge) / 2)!important}}
+  #s13 [data-name="Oval 3"]{{
+    left:calc(0.0965 * var(--plate) - var(--badge) / 2)!important;
+    top:calc(var(--top2) + 0.2204 * var(--h2) - var(--badge) / 2)!important}}
+  #s13 .sh.tx p.t span{{font-size:calc(var(--badge) * 0.44)!important}}
 }}
 """
 

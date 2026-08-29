@@ -1330,8 +1330,8 @@ Decks referenced: **Wheeber**, **FrameTag**, **Global ImAIge** (Global Image Fac
 
 ## 41. OOXML properties that do not survive a naive CSS translation — and the method traps that hide them
 
-Deck 10 (Secret) surfaced six of these in one build (a)-(f), then fourteen more
-across later builds (g)-(t). They are grouped because they share a shape: **a
+Deck 10 (Secret) surfaced six of these in one build (a)-(f), then sixteen more
+across later builds (g)-(v). They are grouped because they share a shape: **a
 property the source states plainly, that the renderer either never reads or
 translates into a CSS construct with different semantics.** Each was invisible
 in code review and each produced output that looked deliberate.
@@ -1343,8 +1343,9 @@ same way; (m)-(q) are the METHOD traps that let the rest survive review; (r)
 returns to (a)'s territory, where the deck-wide default hides; (s) is (m)
 again with the wrong basis rather than the wrong unit; and (t) is the same
 shape in an IMAGE property -- a number that is exact for the authored box and
-meaningless for the reflowed one. The heading widened rather than splitting
-because the lesson is one lesson.
+meaningless for the reflowed one; and (u)-(v) are two CSS mechanics that the
+reflow itself introduces. The heading widened rather than splitting because
+the lesson is one lesson.
 
 ### (a) `wrap="none"` must emit `white-space:nowrap`
 
@@ -1786,7 +1787,89 @@ overflow.
   constant after any reframe, and treat "the fix needs a scrim" as a claim to
   check against the pixels rather than a conclusion.
 
+### (u) A crop's positioned ancestor is part of the contract — `position:static` silently reparents it
+
+- **Symptom** — a photo plate's image painted across the entire slide, over
+  every other shape on it, while every number about the image box was correct.
+- **Root cause** — the reflow put `position:static` on the image shape, which
+  is what the static reflow does to everything else. But `.sh.cropped>.cropw`
+  is `position:absolute;inset:0`, and an absolutely positioned box resolves
+  against the nearest POSITIONED ancestor. Static removed that ancestor, so
+  the crop wrapper bound to the `.canvas` instead: measured, **`.cropw` was
+  960.3px tall inside a 299.5px image box.** The `overflow:hidden` on `.sh.im`
+  did not clip it either, because a static ancestor does not clip an
+  absolutely positioned descendant whose containing block is further up.
+- **Rule** — a cropped media shape reflows to `position:relative`, never
+  `static`: relative keeps it in flow AND keeps it the containing block its
+  crop wrapper needs. *Assertion:* for every `.sh.cropped`, assert the wrapper's
+  computed height equals the shape's; they diverge the moment the ancestor goes.
+- **This is rule 22(a) verbatim** -- "crop wrappers must stay positioned ...
+  or they will resolve against the canvas and blow up to full size" -- written
+  down, read, quoted in the comment of the very block that broke it, and then
+  broken anyway because `static` is what the surrounding reflow uses. **A rule
+  you can recite is not a rule you have applied.**
+
+### (v) `order` is a PAINT-order property, and absolutely positioned children do not participate
+
+- **Symptom** — the blue badge discs did not render at all. Every measurement
+  said they were correct: right size, right fill, right colour, and landing on
+  their authored fractions to two decimals.
+- **Root cause** — the images carried `order:1` / `order:2`. Flex items paint
+  in **order-modified document order**, so those two moved to the end of the
+  paint sequence. The badges are absolutely positioned, which means they are
+  **not flex items at all**, so they keep raw document order and do not move
+  with it — and they sit earlier in the DOM. The photographs painted over
+  their own labels. `elementsFromPoint` under a badge centre read
+  IMG / `.cropw` / Picture 2 **above** the badge's own span.
+- **Setting `order` on the badges does not fix it** — that was tried, at
+  `order:9`, and changed nothing, precisely because order does not apply to a
+  non-flex-item. The fix is to REMOVE order from the images: the DOM was
+  already in the right sequence, so it bought no layout and cost paint order.
+  Layout was bit-for-bit identical without it (plate tops 18px / 329px either
+  way).
+- **Rule** — do not set `order` unless the DOM sequence is actually wrong.
+  Where a container mixes flex items with absolutely positioned children,
+  `order` on the items silently re-ranks them against the children. Reaching
+  for `z-index` to correct it is not available inside the canvas (rule 21), and
+  is treating the symptom. *Assertion:* assert no `order` is emitted for a
+  shape whose document position already matches its intended paint position.
+
 - **Proven by** — Deck 10 (Secret), 2026-08-27/28.
+
+---
+
+## 42. A measurement that passes while the pixels fail
+
+- **Symptom** — deck 10 slide 13's badges were verified twice, in detail, and
+  were not on the screen. The probe reported the badge box at **94.17% x
+  91.40%** of its host image against an authored **94.17 / 91.40** — exact to
+  two decimals — plus the right diameter, the right `border-radius:50%`, the
+  right `#1665BA` fill and the right white glyph. Every one of those readings
+  was true. The discs were painted underneath a photograph and invisible.
+- **Root cause** — the probe measured **geometry and computed style**, and the
+  defect was in **paint order**. Those are disjoint. `getBoundingClientRect()`
+  and `getComputedStyle()` describe where a box *would* be and what it *would*
+  look like; neither is evidence that anything was drawn. A stacking bug is
+  invisible to both by construction.
+- **Rule** — a verification pass must include at least one check that can only
+  pass if the pixels are right. Cheapest is a hit test at the element's own
+  centre (`elementFromPoint` / `elementsFromPoint`, asserting the element or a
+  descendant is returned); next cheapest is a screenshot actually looked at.
+  **Geometry assertions alone verify a layout, never a rendering.**
+  *Assertion:* for any element that must sit ON another — badge on photo, text
+  on ground, caption on media — assert it is the topmost element at its own
+  centre point, not merely that its rect is where it should be.
+- **The failure mode is confidence, not error.** A geometry probe that returns
+  exact authored fractions reads as strong evidence and ends the investigation;
+  it took a screenshot to reopen it. This is rule 41(p) and 41(q) one turn
+  further on: (p) was a cached page reporting the previous build, (q) was a
+  device reporting a cached URL, and this is a **live, correct, current
+  measurement of the wrong property**. In all three the instrument answered
+  confidently and the answer was not about the thing under test.
+- **Corollary** — when a measurement and a screenshot disagree, the screenshot
+  wins and the measurement is the thing to explain. Here the measurement was
+  never wrong; it was answering a different question than the one being asked.
+- **Proven by** — Deck 10 (Secret), slide 13, 2026-08-29.
 
 ---
 
