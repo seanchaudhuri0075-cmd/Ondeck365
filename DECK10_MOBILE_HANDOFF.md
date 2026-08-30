@@ -901,7 +901,91 @@ Still live from 820px to ~1280px canvas width. See the OPEN ITEM above; fixing
 it means emitting a `font-size` on `p.t` and re-taking the standing test
 baseline a second time.
 
-## OPEN — the source deck cannot be regenerated
+## RESOLVED — the source deck and the parser (corrects the section below)
+
+**The two "open" items recorded below were both wrong. Left in place, struck
+through here, because the reasoning that produced them is worth keeping: the
+evidence at the time was that the deck was absent from `~/Downloads` and that
+every other deck had a `model.py` and this one did not. Both inferences were
+sound and both were false.**
+
+### The source deck exists and is proven
+
+    /Volumes/T7 Touch/2026 AUG 1/SecretBeautyCreativeStrategy_OSR.pptx
+    77,705,728 bytes (74.1 MB)   31 slides, 73 media, 7 video
+    mtime 2026-08-26 04:47 — matching its ~$ lock file in ~/Downloads to the minute
+
+**31 of 31 slides match `model.json` positionally, exact text.** The first
+comparison read **28/31** and that reading was an artefact of the checker, not
+of the deck: it concatenated raw `<a:t>` node contents WITHOUT XML-entity
+decoding, so `&amp;` in "Harsh lighting & shadow play" scored as five
+characters against the model's one. Slides 4, 9 and 14 — the only three
+carrying that string — each differed by exactly 4 characters. Entity-decoded,
+they match. **A diff that is off by a constant per occurrence is a decoding
+bug, not a content difference**; the constant is the tell.
+
+Three sibling revisions sit beside it on the T7 (`…Strategy.pptx` 31 slides,
+`_Mobile_OSR.pptx` 31, `_Mobile_OSR1.pptx` 33). The only Secret deck left in
+`~/Downloads` is `_Mobile_OSR2.pptx`, a 7-slide 3.5 MB extract with no video —
+NOT this build's source, and not a clean subset either.
+
+**`hdphoto1.wdp` is 37,732 bytes (0.04 MB)**, not 77.5 MB. The 77.5 MB figure
+is the size of the DECK FILE. The orphan is absent from every output surface.
+
+### The parser was never missing
+
+`phase_1c/deckkit/model.py` (1,227 lines, "OOXML -> model.json") IS the parser,
+and it already ends in `write_model(paths)`. **Secret has no `model.py` by
+design** — `roles.py:51` records that this is the first deck routed on layout
+through `deckkit.model.build_layout_index`. Olay and Old Spice carry deck-local
+parsers because they PREDATE the shared spine, not because a deck needs one.
+
+What was genuinely missing was the driver — which calls, in what order, with
+which per-deck switch. That knowledge lived only in a session transcript.
+
+### Regenerating the deck
+
+    python3 -m phase_1c.secret.build \
+      "/Volumes/T7 Touch/2026 AUG 1/SecretBeautyCreativeStrategy_OSR.pptx"
+
+`phase_1c/secret/build.py` unzips to `paths.raw`, calls
+`deckkit.model.write_model(paths)`, then `deckkit.assets.build_all(paths, imgs,
+vids, video_kw={"copy": True})`. `--out` builds to a scratch directory so the
+path can be re-verified without overwriting the committed artifacts.
+
+**PROVEN, not asserted.** Run against the T7 source into a scratch output and
+hashed against what is committed:
+
+    model.json            SHA-256 IDENTICAL (41ad41ba2c336fa7…)
+    used_assets.json      IDENTICAL
+    asset_manifest.json   IDENTICAL
+    assets/               72 of 72 IDENTICAL, 0 differ, none missing, none extra
+    index.html rendered from the regenerated model
+                          IDENTICAL (b3933c4cf6b5ed86…)
+
+pptx -> model -> assets -> html reproduces byte for byte, videos included —
+the stream-copy is deterministic under ffmpeg 8.1. Runtime ~19s.
+
+### Backups
+
+**Time Machine has NO destinations configured** (`tmutil destinationinfo`), and
+the only local snapshots are OS-update ones. There is no system backup history.
+The T7 Touch is the only copy of the source deck, and `~/Downloads` is not a
+backup — four of the five Secret decks were removed from it during this work.
+
+    /Users/gif025/ondeck-secret-backup-2026-08-29/
+      secret/          45 MB   the whole out/secret tree, 77/77 files hash-verified
+      source-decks/   152 MB   _OSR.pptx, _Mobile_OSR1.pptx, _Mobile_OSR2.pptx
+
+`model.json`, `asset_manifest.json`, `used_assets.json` and the 72 assets are
+also force-added into git past `.gitignore` (commit 9237592, +18.66 MB). The
+74 MB source deck is NOT in git; the T7 and the backup directory are its only
+homes.
+
+## SUPERSEDED — "the source deck cannot be regenerated"
+
+*(kept for the reasoning; both conclusions are corrected above)*
+
 
 **This is the most serious item here and it is not a rendering problem.**
 
