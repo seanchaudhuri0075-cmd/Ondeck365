@@ -17,9 +17,10 @@ WHAT IS DIFFERENT ABOUT THIS DECK, in one place:
   routed on measured geometry, per slide -- never on `layout_name`
   (section 5). LAYOUT_ARCHETYPE below says only what the names honestly say.
 
-* **It is deck 9 and deck 10 at once.** 27 clips are far too heavy for the web
-  and 22 already are not, with nothing in between, so the video mode is per
-  file (section 6, section 7 item 2).
+* **It is deck 9 and deck 10 at once.** 27 clips are over 3 Mbps and 22 are
+  under it, with nothing in between, so the video mode is per file (section 6,
+  section 7 item 2) -- and three of the 27 are copied anyway, because
+  re-encoding them made them bigger (BUILD 2).
 
 * **Its films are spoken.** Audio is KEPT in every file; whether a clip plays
   muted, and whether it waits for a click, come from model.json's `muted` and
@@ -86,11 +87,18 @@ assert sum(len(v) for v in GEOMETRY_GROUPS.values()) == N_SLIDES, "a slide is li
 # should read as one. Rule applied: re-encode every clip over 3 Mbps, stream-
 # copy the rest. The two populations do not touch -- the heaviest copy is
 # 2.82 Mbps, the lightest re-encode 3.99 -- so no file is a judgement call.
+#
+# THREE EXCEPTIONS, found by BUILD 1 (2026-09-17) and switched to copy on
+# Sean's decision: media19, media42 and media49 are over 3 Mbps, but CRF 23
+# made each of them LARGER than its source. A second lossy generation that also
+# costs bytes is the trade `copy` exists to refuse. They sit in the copy block
+# below with both sizes. The rule is a proxy for "too heavy for the web"; the
+# measured output is the thing itself, and it wins.
 # The trailing comment is the SOURCE: Mbps, WxH, slide.
 #
 # build.py refuses to run unless this map names exactly the deck's used videos.
 VIDEO_MODES = {
-    # ---- re-encode: 27 clips, 1,298.6 MB of the 1,464.7 -------------------
+    # ---- re-encode: 24 clips, 1,266.2 MB of the 1,464.7 -------------------
     "media1.mp4":  "encode",   # 15.29  1080x1920  s7
     "media3.mp4":  "encode",   # 45.13  1920x1440  s8
     "media6.mp4":  "encode",   # 14.94  1080x1920  s10
@@ -100,7 +108,6 @@ VIDEO_MODES = {
     "media10.mp4": "encode",   # 33.37  1920x1080  s14   242 MB, click-to-play
     "media11.mp4": "encode",   #  3.99  1080x1920  s16   the lightest re-encode
     "media15.mp4": "encode",   #  5.44  1080x1920  s17
-    "media19.mp4": "encode",   #  4.44  1920x1080  s18
     "media27.mp4": "encode",   # 10.39  1080x1920  s21   click-to-play
     "media28.mp4": "encode",   # 19.57  1080x1920  s21   118 MB, click-to-play
     "media29.mp4": "encode",   # 15.87  1080x1920  s21   225 MB, click-to-play
@@ -113,12 +120,11 @@ VIDEO_MODES = {
     "media39.mp4": "encode",   #  5.13  1080x1920  s24
     "media40.mp4": "encode",   #  5.13  1080x1920  s24
     "media41.mp4": "encode",   #  5.17  1080x1920  s25
-    "media42.mp4": "encode",   #  5.05  1080x1920  s25
     "media43.mp4": "encode",   #  5.09  1080x1920  s25
     "media47.mp4": "encode",   # 34.07  1920x1080  s29   207 MB, click-to-play
     "media48.mp4": "encode",   #  4.55  1920x1080  s31
-    "media49.mp4": "encode",   #  5.10  1920x1080  s32
     # ---- stream-copy: 22 clips, 166.1 MB, already web-rate ----------------
+    # (media16 at 2.82 Mbps is the heaviest of these 22)
     "media2.mp4":  "copy",     #  0.82   720x1280  s7
     "media4.mp4":  "copy",     #  2.14  1080x1920  s8
     "media5.mp4":  "copy",     #  2.80  1920x1080  s9
@@ -141,9 +147,15 @@ VIDEO_MODES = {
     "media44.mov": "copy",     #  1.28   300x600   s26   .mov in, .mp4 out
     "media45.mp4": "copy",     #  1.84  1920x1080  s27
     "media46.mp4": "copy",     #  0.76  1920x1080  s28
+    # ---- stream-copy BY MEASUREMENT: 3 clips, 32.4 MB ---------------------
+    # Over 3 Mbps, but BUILD 1's CRF 23 re-encode came out larger than the
+    # source, so copying is both smaller and one lossy generation cleaner.
+    "media19.mp4": "copy",     #  4.44  1920x1080  s18   re-encode 11.72 MB > source  8.33 MB
+    "media42.mp4": "copy",     #  5.05  1080x1920  s25   re-encode  6.45 MB > source  6.31 MB
+    "media49.mp4": "copy",     #  5.10  1920x1080  s32   re-encode 18.79 MB > source 17.73 MB
 }
-assert sum(m == "encode" for m in VIDEO_MODES.values()) == 27
-assert sum(m == "copy" for m in VIDEO_MODES.values()) == 22
+assert sum(m == "encode" for m in VIDEO_MODES.values()) == 24
+assert sum(m == "copy" for m in VIDEO_MODES.values()) == 25
 
 # CRF 23 / medium are deckkit's defaults and are named here so the call site
 # reads as a decision: measured on the seven heaviest clips, CRF 23 beat deck

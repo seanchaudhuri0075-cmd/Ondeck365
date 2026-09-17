@@ -6,8 +6,8 @@ dry run of `phase_1c.deckkit.model.build_model` against an XML-only scratch
 extract, or from scratch encodes run with `deckkit.assets`' exact ffmpeg
 command line. Where a figure is an estimate it says so, and says from what.
 
-**UPDATE 2026-09-17: the first full asset build exists -- see "BUILD 1" at the
-end of this file. Still nothing rendered, uploaded or published. The status
+**UPDATE 2026-09-17: the asset build exists -- see "BUILD 1" and "BUILD 2" at
+the end of this file; BUILD 2 is what `out/unilever_shpc/` holds. Still nothing rendered, uploaded or published. The status
 paragraph below describes the moment of reconnaissance.**
 
 **Status: nothing built, nothing committed, nothing uploaded, nothing
@@ -1021,14 +1021,101 @@ was applied as written and the build is committed as built; flipping these
 three to `"copy"` in `roles.VIDEO_MODES` is a one-line-each change that would
 save 4.6 MB and one generation of loss, and moves three `out_sha256` values.
 **Sean's call** -- it is a change to a per-file decision he specified.
+*(Taken: see BUILD 2.)*
 
 ## Not done / still open
 
-* **No push was possible from this session** -- the harness's permission
-  classifier blocked `git push`. Commits are local until Sean pushes.
+* ~~No push was possible from this session -- the harness's permission
+  classifier blocked `git push`. Commits are local until Sean pushes.~~
+  **CORRECTED: pushed 2026-09-17.** Sean ran `git push origin main` himself;
+  the four commits `c247ab3`, `3699fe1`, `1872d49` and `a8c0fec` went to
+  `origin/main` (`ad39d04..a8c0fec`), confirmed by fetch with local and origin
+  both at `a8c0fec`. The classifier block on `git push` from the session
+  itself stands; pushes are Sean's to run.
 * No `render.py`, no `validate.py`, no `index.html`. Fonts undecided (section
   4), R2 prefix unchosen, `editor_roundtrip.py` unwritten, off-site third copy
   of the sources not made (OPEN ITEMS 1, 2, 4, 5).
 * Nothing has been uploaded to R2; the 498 MB in `out/unilever_shpc/assets/`
   exists on this one disk only. It is fully regenerable from the source deck
   in ~5 minutes, which is the reason that is acceptable.
+
+---
+
+# BUILD 2 -- three clips switched to stream-copy, 2026-09-17
+
+**On Sean's decision, from BUILD 1's finding. `out/unilever_shpc/` now holds
+BUILD 2. Nothing rendered, nothing uploaded, nothing published, no media in
+git.**
+
+`roles.VIDEO_MODES`: `media19.mp4`, `media42.mp4`, `media49.mp4` moved from
+`"encode"` to `"copy"` -- 24 re-encoded, 25 copied. They are over the 3 Mbps
+line, but CRF 23 made each LARGER than its source, so the re-encode cost a
+lossy generation and bytes both. The 3 Mbps rule is a proxy for "too heavy for
+the web"; the measured output is the thing itself. `roles.py` keeps them in
+their own block with both sizes, so the exception reads as one.
+
+| file | slide | source | BUILD 1 (encode) | BUILD 2 (copy) | output |
+|:--|--:|--:|--:|--:|:--|
+| `media19.mp4` | 18 | 8.33 MB | 11.72 MB | **8.34 MB** | `vid_3191c521a365.mp4` |
+| `media42.mp4` | 25 | 6.31 MB | 6.45 MB | **6.26 MB** | `vid_9151287e1165.mp4` |
+| `media49.mp4` | 32 | 17.73 MB | 18.79 MB | **17.73 MB** | `vid_d608e6f79d8e.mp4` |
+
+A stream copy is not byte-equal to its source: the container is rewritten for
+`+faststart` (+7,664 B, -53,277 B and +40 B against the three sources). The
+video packets are the source's own; the AAC track is copied, not re-encoded.
+
+## How it was built and checked
+
+Not rebuilt in place -- outputs are named by SOURCE hash and an existing file
+is reused, so building over BUILD 1 would have silently kept the three old
+encodes (section 7 item 2; `build.py` refuses a non-empty `--out` for exactly
+this). Instead: sources verified `OK` against `SHA256SUMS`; a fresh raw
+extract; a full build into the empty `~/DeckBuild/unilever_shpc/out_build2`
+(49 of 49 videos, 0 failures, 274 s).
+
+**BUILD 2 vs BUILD 1, file by file, the three clips the only allowance:** 108
+files each, none missing, none extra; **104 of 108 byte-identical**. The four
+that differ are exactly the three output files above and
+`asset_manifest.json`, and the manifest is identical once those three entries
+are set aside -- the other 55 images and 46 videos equal, key order unchanged.
+In each of the three entries only `mode`, `out_bytes` and `out_sha256` moved;
+the output FILENAMES did not (source-hash naming), and `audio` stayed true.
+`model.json` and `used_assets.json` are byte-identical to BUILD 1's: the mode
+of a clip is not a fact about the deck. An allowance naming a clip that had not
+changed would have failed the comparison.
+
+BUILD 2 was then moved into `out/unilever_shpc/` (BUILD 1 held aside until the
+new tree passed the full BUILD 1 verification -- model counts, all 105
+`out_sha256` against disk, no stray files, H.264 / yuv420p / faststart on all
+50 clips, AAC on 48 of 49, slide 26 poster + clip, slide 30 at 1605x7872 --
+then deleted, with the raw extract).
+
+| | BUILD 1 | BUILD 2 |
+|:--|--:|--:|
+| videos re-encoded | 27: 1,298.6 -> 324.5 MB | 24: 1,266.2 -> 287.5 MB |
+| videos stream-copied | 22: 166.1 -> 166.0 MB | 25: 198.5 -> 198.4 MB |
+| videos total | 490.53 MB | **485.90 MB** |
+| assets/ total (105 files) | 498.15 MB | **493.52 MB** (-4.63) |
+| largest file | `media29` 73.99 MB | unchanged |
+
+    out/unilever_shpc/   (BUILD 2)
+      model.json            sha256 24040d93ce780804…   unchanged from BUILD 1
+      used_assets.json      sha256 32aa5daebd0e2dcc…   unchanged from BUILD 1
+      asset_manifest.json   sha256 95ebf5ba34d961cd…   three entries changed
+
+## The regeneration gate -- PASSED
+
+One more full build after the swap, from another fresh extract into another
+empty scratch directory (49 of 49, 0 failures, 280 s), compared against the new
+`out/unilever_shpc/` with NO allowance: **108 of 108 files IDENTICAL** --
+`model.json`, `used_assets.json`, `asset_manifest.json`, 55 of 55 WebP, 50 of
+50 MP4. Scratch output and raw extract deleted; the four build logs are kept in
+`~/DeckBuild/unilever_shpc/`.
+
+## Still open (unchanged by this build)
+
+`render.py`, `validate.py`, `index.html`; the SF Pro substitute (section 4);
+the R2 prefix; `editor_roundtrip.py`; the off-site third copy of the source
+decks (OPEN ITEMS 1, 2, 4, 5). `media11` (9.99 -> 8.64 MB) and `media36`
+(6.73 -> 5.90 MB) remain re-encoded: marginal, but they do come out smaller,
+so the rule still earns its keep on them.

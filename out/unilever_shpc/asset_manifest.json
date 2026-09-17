@@ -859,9 +859,9 @@
    "height": 1080,
    "aspect": "16/9",
    "src_bytes": 8329606,
-   "out_bytes": 11723412,
-   "out_sha256": "79463dd9c1dd121c8da62d9120d0cc991de1ecbf9c2ea18e5fd9dac33617c39d",
-   "mode": "encode",
+   "out_bytes": 8337270,
+   "out_sha256": "4a9a7559fe92c5ebc038e29ba5ff55bde3befd6c91102a39128e90916a05b72a",
+   "mode": "copy",
    "audio": true
   },
   "media2.mp4": {
@@ -1171,9 +1171,9 @@
    "height": 1920,
    "aspect": "9/16",
    "src_bytes": 6310907,
-   "out_bytes": 6445440,
-   "out_sha256": "dee4739e985abdec3f354ca682871d33c471c7a5fa95f79982a19cbe7361defd",
-   "mode": "encode",
+   "out_bytes": 6257630,
+   "out_sha256": "7c5f17006e1bb88d20b998c6519091312c0a719e7f25b3e09b4e3f4a8c2774ca",
+   "mode": "copy",
    "audio": true
   },
   "media43.mp4": {
@@ -1255,9 +1255,9 @@
    "height": 1080,
    "aspect": "16/9",
    "src_bytes": 17734343,
-   "out_bytes": 18790904,
-   "out_sha256": "18ec56ad903b2a8ce644977bcd15f0f071eef838d08023af31caf0152ddd358c",
-   "mode": "encode",
+   "out_bytes": 17734383,
+   "out_sha256": "cd95c1c4035fce7e71cd77f0e7b7e23c585efaeec419157b550203414350be9d",
+   "mode": "copy",
    "audio": true
   },
   "media5.mp4": {
