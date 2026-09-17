@@ -6,6 +6,10 @@ dry run of `phase_1c.deckkit.model.build_model` against an XML-only scratch
 extract, or from scratch encodes run with `deckkit.assets`' exact ffmpeg
 command line. Where a figure is an estimate it says so, and says from what.
 
+**UPDATE 2026-09-17: the first full asset build exists -- see "BUILD 1" at the
+end of this file. Still nothing rendered, uploaded or published. The status
+paragraph below describes the moment of reconnaissance.**
+
 **Status: nothing built, nothing committed, nothing uploaded, nothing
 published.** No `phase_1c/unilever_shpc/` directory exists yet. No file was
 written to the T7 or to `out/`. The source deck was opened read-only.
@@ -174,7 +178,7 @@ Proposed per-slide routing for `roles.py`. Advisory only — see section 5.
 | statement | 1, 6, 15, 35 · 13, 34 | text only (2 shapes) · text + logo |
 | diagram | 2, 3, 4, 5 | 28-31 shapes: numbered rect cards + text, no media beyond the logo |
 | full-bleed video | 9, 12, 14, 27, 28, 29, 31, 32 · 11 | one video at 100x100 (12 is 104x104, overscanned) · 11 at 72x72 |
-| portrait video wall | 16, 17, 19-25 · 7, 10 | 3-4 portrait clips at ~23-26% x 74-83% · 2 clips at 28x88 |
+| portrait video wall | 16, 17, 19, 21-25 · 7, 10 | 3-4 portrait clips at ~23-26% x 74-83% · 2 clips at 28x88 |
 | mixed video | 8, 18, 20 | landscape + portrait clips side by side |
 | image board | 26, 30, 33 | 26: 73x74 animated GIF + portrait clip · 30: one 1920x9419 image shown as three cropped windows · 33: four billboards, one group, two off-canvas |
 
@@ -676,6 +680,12 @@ Each was found by measurement, not anticipated.
    is normally reproducible for a fixed build, preset and thread count, but
    that has not been shown on this machine. Prove it on one clip (encode twice,
    compare hashes) before the gate is relied on; pin `-threads` if it fails.
+
+   **RESOLVED 2026-09-17.** Two complete builds into two empty directories,
+   from two separate extractions: all 27 CRF 23 re-encodes -- and their AAC
+   audio encodes -- came out byte-identical, with no `-threads` pin (ffmpeg
+   8.1, 8 cores). See BUILD 1. Proven for THIS machine and THIS ffmpeg; a
+   different x264 build is a different claim, and `out_sha256` will say so.
 10. **Local disk.** 4.6 GB free on the boot volume. A build needs the raw
     extract (1.57 GB) + `out/` (~0.5 GB) + scratch partials; a standalone
     (0.67 GB, not wanted anyway) would not fit alongside. Pass `--raw` to a
@@ -910,3 +920,115 @@ from a preference.**
   subject to the load gate in 7.6.
 
 Still open here: the SF Pro substitute and the R2 prefix.
+
+---
+
+# BUILD 1 -- first full asset build, 2026-09-17
+
+**Model + 55 images + 49 videos + the GIF clip. Nothing rendered, nothing
+uploaded, nothing published. No media is in git.**
+
+(Correction made with this build: section 3's geometry table listed slide 20
+under both "portrait video wall" (as part of "19-25") and "mixed video". Its
+three clips are 24x75, 42x75, 24x75 -- it is mixed, and `roles.py` lists it
+once. The table row now reads "16, 17, 19, 21-25".)
+
+## What exists
+
+    phase_1c/unilever_shpc/
+      build.py     unzip -> DeckPaths -> write_model -> build_images -> videos, one file per call
+      roles.py     slug, GEOMETRY_GROUPS (section 3), VIDEO_MODES written out per file
+                   (27 encode / 22 copy), AUDIO = "keep", fonts an explicit TODO
+                   (FONTS_DECIDED = False -> section 4), R2_PREFIX = None
+      (no model.py by design; no render.py and no validate.py yet)
+
+    out/unilever_shpc/                 499 MB on disk, gitignored
+      model.json            401,562 B  sha256 24040d93ce780804…   COMMITTED (force-added)
+      used_assets.json        1,784 B  sha256 32aa5daebd0e2dcc…   COMMITTED
+      asset_manifest.json    33,537 B  sha256 401bf69eac4d73c1…   COMMITTED
+      assets/               105 files, 498.15 MB                  NOT in git, by decision
+
+    python3 -m phase_1c.unilever_shpc.build --raw ~/DeckBuild/unilever_shpc/raw
+
+`build.py` differs from Secret's driver in three deliberate ways: it REFUSES a
+non-empty `--out` (the source-hash reuse hazard, section 7 item 2); it asserts
+`roles.VIDEO_MODES` names exactly the deck's used videos, so a revision that
+adds or drops a clip reopens the decision instead of falling to a default; and
+it builds videos one file per call in `build_videos`' own sorted order, timing
+each and surviving a failed encode (recorded, reported, non-zero exit, never
+written into the manifest). The manifest is identical to a single
+`build_all` call's.
+
+The raw extract lived at `~/DeckBuild/unilever_shpc/raw` -- boot volume,
+outside the repo, off the T7 -- and was deleted afterwards; the two build logs
+are kept there. Source: the local copy in `~/DeckSources/unilever_shpc/`,
+verified `OK` against `SHA256SUMS` immediately before.
+
+## Result
+
+309 s wall clock (extract 4 s, model 0.3 s, images incl. the GIF clip 18 s,
+videos 287 s). **49 of 49 videos, 0 failures.**
+
+| set | n | source MB | output MB |
+|:--|--:|--:|--:|
+| images -> WebP | 55 | 104.18 | 3.91 |
+| animated GIF -> H.264 | 1 | 25.54 | 3.71 |
+| videos re-encoded, CRF 23 + AAC 160k | 27 | 1,298.6 | 324.5 |
+| videos stream-copied, audio copied | 22 | 166.1 | 166.0 |
+| **assets/** | **105 files** | **1,568.9** | **498.15** |
+
+Reconnaissance estimated ~505 MB (section 6); measured 498.15, with audio
+kept, which the estimate had assumed stripped. Largest single file:
+`media29.mp4` -> `vid_8b5b8a8ec320.mp4`, **73.99 MB** -- under GitHub's 100 MB
+wall, over its 50 MB warning, and beside the point: none of it goes to git.
+
+Verified against the files on disk, not the log:
+
+* `model.json`: 35 slides, 268 shapes, 49 videos; "NULL" nowhere in it or in
+  `used_assets.json`. Slide 26's picture carries `animated_gif`.
+* `asset_manifest.json`: `out_sha256` + `out_bytes` on all 105 entries (55
+  images, 49 videos, 1 `animated` block), every one matching its file;
+  `assets/` holds exactly the files the manifest names, no strays.
+* ffprobe on all 50 clips: H.264, yuv420p, `moov` before `mdat` (faststart).
+  **AAC audio on 48 of 49 videos**; `media32.mp4` has no track at source and
+  none out (`"audio": false`); the GIF clip is silent.
+* Slide 26: poster `img_cbfe6e8e1f0e.webp` (8,714 B) + clip
+  `vid_cbfe6e8e1f0e.mp4` (3,708,587 B, 1000x570, matte `#FFFFFF`).
+* Slide 30: `image50.png` at **1605x7872**, `lifted_from [408, 2000]`.
+
+## The regeneration gate -- PASSED
+
+A second complete build, from a second extraction, into a second empty
+directory, hash-compared file by file against the first: **108 of 108 files
+IDENTICAL** -- `model.json`, `used_assets.json`, `asset_manifest.json`, 55 of
+55 WebP, 50 of 50 MP4. None missing, none extra. This is this deck's
+byte-for-byte gate, and because the media is not in git it is re-runnable
+against the COMMITTED `asset_manifest.json` alone: rebuild anywhere, compare
+`out_sha256`.
+
+## Found by this build -- three re-encodes came out LARGER than their source
+
+| file | slide | source | output | source Mbps |
+|:--|--:|--:|--:|--:|
+| `media19.mp4` | 18 | 8.33 MB | **11.72 MB** | 4.44 |
+| `media49.mp4` | 32 | 17.73 MB | **18.79 MB** | 5.10 |
+| `media42.mp4` | 25 | 6.31 MB | **6.45 MB** | 5.05 |
+
+For these the 3 Mbps rule buys a second lossy generation AND a bigger file --
+the exact trade Secret's `copy` switch exists to refuse. `media11` (9.99 ->
+8.64) and `media36` (6.73 -> 5.90) are marginal wins of the same kind. The rule
+was applied as written and the build is committed as built; flipping these
+three to `"copy"` in `roles.VIDEO_MODES` is a one-line-each change that would
+save 4.6 MB and one generation of loss, and moves three `out_sha256` values.
+**Sean's call** -- it is a change to a per-file decision he specified.
+
+## Not done / still open
+
+* **No push was possible from this session** -- the harness's permission
+  classifier blocked `git push`. Commits are local until Sean pushes.
+* No `render.py`, no `validate.py`, no `index.html`. Fonts undecided (section
+  4), R2 prefix unchosen, `editor_roundtrip.py` unwritten, off-site third copy
+  of the sources not made (OPEN ITEMS 1, 2, 4, 5).
+* Nothing has been uploaded to R2; the 498 MB in `out/unilever_shpc/assets/`
+  exists on this one disk only. It is fully regenerable from the source deck
+  in ~5 minutes, which is the reason that is acceptable.
