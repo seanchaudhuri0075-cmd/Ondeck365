@@ -34,6 +34,26 @@ VIDEO_CRF = 23
 VIDEO_PRESET = "medium"
 
 
+def _out_hash(path: Path) -> dict:
+    """{"out_bytes", "out_sha256"} of a FINISHED output file.
+
+    `sha` in the manifest is the SOURCE hash: it names the asset, and it does
+    not move when the encoder settings do. So until this existed the manifest
+    could not say whether two builds produced the same bytes -- only committed
+    blobs could, which is how Secret's regeneration was proven. Deck 11's
+    ~500 MB of video cannot live in git, so its byte-for-byte gate has to run
+    against the manifest instead, and that needs the OUTPUT's hash.
+
+    Read from disk after the atomic rename (rule 8), never from the encoder's
+    buffer: the claim is about the file that ships.
+    """
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return {"out_bytes": path.stat().st_size, "out_sha256": h.hexdigest()}
+
+
 def build_images(paths: DeckPaths, used: set[str], max_dim: int = MAX_DIM,
                  quality: int = WEBP_Q) -> dict:
     paths.assets.mkdir(parents=True, exist_ok=True)
@@ -54,7 +74,7 @@ def build_images(paths: DeckPaths, used: set[str], max_dim: int = MAX_DIM,
                               "src_w": None, "src_h": None,
                               "out_w": None, "out_h": None, "alpha": True,
                               "src_bytes": src.stat().st_size,
-                              "out_bytes": (paths.assets / out_name).stat().st_size}
+                              **_out_hash(paths.assets / out_name)}
             continue
 
         im = Image.open(src)
@@ -74,7 +94,7 @@ def build_images(paths: DeckPaths, used: set[str], max_dim: int = MAX_DIM,
         manifest[name] = {"out": out_name, "sha": digest, "svg": False,
                           "src_w": w0, "src_h": h0, "out_w": im.width, "out_h": im.height,
                           "alpha": has_alpha,
-                          "src_bytes": src.stat().st_size, "out_bytes": dst.stat().st_size}
+                          "src_bytes": src.stat().st_size, **_out_hash(dst)}
     return manifest
 
 
@@ -149,7 +169,7 @@ def build_videos(paths: DeckPaths, used: set[str], crf: int = VIDEO_CRF,
                   flush=True)
         info = _probe(dst)
         manifest[name] = {"out": out_name, "sha": digest, **info,
-                          "src_bytes": src.stat().st_size, "out_bytes": dst.stat().st_size}
+                          "src_bytes": src.stat().st_size, **_out_hash(dst)}
     return manifest
 
 

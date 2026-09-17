@@ -57,7 +57,7 @@ def _video_pic(name, x, link_rid, media_rid, poster_rid):
             f'<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>')
 
 
-def _package(tmp_path, shapes, slide_rels):
+def _package(tmp_path, shapes, slide_rels, timing=""):
     raw = tmp_path / "raw"
     ppt = raw / "ppt"
     for d in ("_rels", "slides/_rels", "slideLayouts/_rels", "slideMasters/_rels",
@@ -87,7 +87,7 @@ def _package(tmp_path, shapes, slide_rels):
         ("rId1", f"{REL}/slideMaster", "../slideMasters/slideMaster1.xml", False)))
 
     (ppt / "slides" / "slide1.xml").write_text(
-        f'<p:sld {NS}>{EMPTY_TREE.format(shapes=shapes)}</p:sld>')
+        f'<p:sld {NS}>{EMPTY_TREE.format(shapes=shapes)}{timing}</p:sld>')
     (ppt / "slides" / "_rels" / "slide1.xml.rels").write_text(_rels(
         ("rId99", f"{REL}/slideLayout", "../slideLayouts/slideLayout1.xml", False),
         *slide_rels))

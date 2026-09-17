@@ -536,12 +536,45 @@ Each was found by measurement, not anticipated.
    single-threaded server. **49 must not all fetch at load** — `preload="none"`
    plus an IntersectionObserver play/pause gate is required in the new
    `render.py`, and `+faststart` (already applied) is what makes that stream.
+
+   **FIXED 2026-09-17 (the parser half).** `deckkit.model._playback_index`
+   reads each slide's `<p:timing>` through the parsed tree and joins timing
+   nodes to shapes by `<p:spTgt spid>` == `<p:cNvPr id>` only. Every video in
+   `model.json` now carries `"playback"`: `auto` (a `playFrom` mediacall in a
+   main-sequence step that starts on slide entry), `click` (a clickEffect in
+   the main sequence, or only PowerPoint's interactive toggle-pause sequence)
+   or `none`. `nodeType` alone is NOT the test: a step that waits for a click
+   always contains a clickEffect, so a withEffect riding in that step is
+   `click`; and auto outranks click because every auto clip also carries the
+   toggle-pause sequence. `"loop"` / `"muted"` are written only when the
+   shape's `<p:cMediaNode>` states them (`repeatCount`, `mute`) — absent
+   attribute, absent key. **No renderer reads any of this yet**; Secret's
+   `index.html` is byte-identical with the fields present. The load half of
+   this item (49 clips must not all fetch at load) is still open and belongs
+   to the new `render.py`.
+
+   Measured on this deck: **43 auto, 6 click, 0 none.** The six click-to-play
+   clips are exactly the long, heavy, spoken ones — `media10` (slide 14, 58 s
+   TVC), `media27`-`media30` (slide 21, the four UGC testimonials, 19-113 s),
+   `media47` (slide 29, 49 s) — 904 MB of source between them, and none states
+   `mute`. Stated muted: 27 clips; stated looping: 18; two state a finite
+   repeat (`media20`, `media46`); 21 state neither. That bears directly on the
+   audio decision in item 3: the author muted the ambient loops and left the
+   click-to-play films audible. Secret, for comparison: 7 of 7
+   `auto` / `loop` / `muted`, which is what it shipped as.
 7. **Entrance animations (slides 2, 34) and fade transitions (15 slides) are
    dropped.** Recorded, not proposed: no deck in the corpus renders them.
 8. **`asset_manifest.json` records the SOURCE sha and `out_bytes`, not an
    output hash.** With the videos on R2 rather than in git, the byte-for-byte
    gate needs `out_sha256` per asset so a regeneration can be verified against
    the committed manifest instead of against committed blobs.
+
+   **FIXED 2026-09-17.** `deckkit.assets` writes `out_sha256` beside
+   `out_bytes` for every WebP, SVG and video, hashed from the finished file on
+   disk after the atomic rename. `sha` is unchanged and still names the asset
+   by its SOURCE. Secret's committed `asset_manifest.json` now carries all 72,
+   and each equals the sha256 of the committed blob it names — so the manifest
+   alone can now stand in for the blobs, which is what this deck needs.
 9. **CRF re-encode determinism is unproven.** Secret's byte-for-byte proof
    covered stream-copy only ("deterministic under ffmpeg 8.1"). libx264 output
    is normally reproducible for a fixed build, preset and thread count, but
@@ -568,7 +601,8 @@ unzip → `DeckPaths(...)` directly, not `for_deck` → `dkmodel.write_model` �
 substitution with its evidence, video mode map), a **new** `render.py`
 (OPEN ITEMS 2), `validate.py`. **No `model.py`** — `deckkit/model.py` is the
 parser. Items 1, 2, 4, 5 and 8 above are deckkit changes and land there, not
-in a deck-local fork.
+in a deck-local fork. (1, 6 and 8 are done — see their FIXED notes. 2, 4 and 5
+remain. Additive deckkit changes are gated with `tools/strip_compare.py`.)
 
 ---
 

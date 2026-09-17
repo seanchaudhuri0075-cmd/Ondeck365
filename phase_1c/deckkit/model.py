@@ -149,6 +149,100 @@ def _video_target(el, rl):
     return None
 
 
+_P = "{%s}" % NS["p"]
+_TRUE = ("1", "true")
+
+
+def _playback_index(root) -> dict:
+    """{shape id: {"playback", "loop"?, "muted"?}} from the slide's <p:timing>.
+
+    ADVISORY DATA. No renderer reads these fields yet; every deck still plays
+    the editor's attribute set. They are recorded because deck 11 (Unilever)
+    is the first deck where the author's intent varies clip to clip -- a TV
+    commercial that waits for a click beside a wall of four that start on
+    entry -- and the model had no place to hold that.
+
+    Timing nodes name their target by `<p:spTgt spid>`, which is the shape's
+    `<p:cNvPr id>`. That is the only join used; nothing is matched by name,
+    order or position (rule 1's spirit, applied to timing).
+
+    "playback" is what STARTS the clip:
+
+      auto   a `mediacall` play command in the main sequence, in a step that
+             begins on slide entry. PowerPoint writes those effects as
+             withEffect / afterEffect. A step that waits for a click always
+             CONTAINS a clickEffect node, so a withEffect that merely rides
+             along with someone else's click is not "on slide entry" and does
+             not count. nodeType alone would get that wrong.
+      click  any other mediacall that targets the shape: a clickEffect in the
+             main sequence, or the interactive sequence PowerPoint attaches to
+             a video ("click the clip to play / pause", presetID 2).
+      none   no timing node STARTS it: nothing targets it, or only commands
+             that cannot start a clip (stop, pause). A bare <p:cMediaNode>
+             declares a clip and starts nothing. (No "playback" key in this
+             index; the caller supplies the default.)
+
+    auto outranks click, because every auto clip ALSO carries the interactive
+    toggle-pause sequence: reading that as "click" would mark the whole deck
+    click-to-play.
+
+    "loop" and "muted" are recorded ONLY when the XML states them, on the
+    shape's `<p:cMediaNode>`: `mute` is an attribute, and looping is
+    `repeatCount` on its cTn ("indefinite" loops; any other stated count does
+    not). Absent attribute -> absent key, never a guessed default.
+    """
+    out: dict = {}
+    timing = root.find("p:timing", NS)
+    if timing is None:
+        return out
+
+    for mn in timing.iter(_P + "cMediaNode"):
+        tgt = mn.find("p:tgtEl/p:spTgt", NS)
+        if tgt is None or not tgt.get("spid"):
+            continue
+        ent = out.setdefault(tgt.get("spid"), {})
+        if mn.get("mute") is not None:
+            ent["muted"] = mn.get("mute") in _TRUE
+        ctn = mn.find("p:cTn", NS)
+        if ctn is not None and ctn.get("repeatCount") is not None:
+            ent["loop"] = ctn.get("repeatCount") == "indefinite"
+
+    def _seq_and_step(node):
+        """(enclosing seq's nodeType, the top-level step <p:par> under it)."""
+        step, cur = None, node.getparent()
+        while cur is not None and cur is not timing:
+            if etree.QName(cur).localname == "seq":
+                sc = cur.find("p:cTn", NS)
+                return (sc.get("nodeType") if sc is not None else None), step
+            if etree.QName(cur).localname == "par":
+                step = cur
+            cur = cur.getparent()
+        return None, None
+
+    for ctn in timing.iter(_P + "cTn"):
+        if ctn.get("presetClass") != "mediacall":
+            continue
+        seq_type, step = _seq_and_step(ctn)
+        waits_for_click = step is not None and any(
+            c.get("nodeType") == "clickEffect" for c in step.iter(_P + "cTn"))
+        for cmd in ctn.iter(_P + "cmd"):
+            tgt = cmd.find("p:cBhvr/p:tgtEl/p:spTgt", NS)
+            if tgt is None or not tgt.get("spid"):
+                continue
+            verb = cmd.get("cmd") or ""
+            plays = verb.startswith("playFrom")
+            if not (plays or verb == "togglePause"):
+                continue      # stop / pause start nothing, on entry or on click
+            auto = (seq_type == "mainSeq" and not waits_for_click and plays
+                    and ctn.get("nodeType") in ("withEffect", "afterEffect"))
+            ent = out.setdefault(tgt.get("spid"), {})
+            if auto:
+                ent["playback"] = "auto"
+            else:
+                ent.setdefault("playback", "click")
+    return out
+
+
 def _srcrect(el):
     sr = el.find(".//a:srcRect", NS)
     if sr is None:
@@ -1068,6 +1162,7 @@ def build_model(paths: DeckPaths,
                               and f.element.find(".//p:nvPicPr/p:nvPr/p:ph", NS) is None]
 
         shapes, skipped = [], []
+        playback = _playback_index(root)
         for _from_layout, fs in ([(True, f) for f in lay_shapes]
                                  + [(False, f) for f in flatten_slide(_SlideShim(root))]):
             el = fs.element
@@ -1141,6 +1236,16 @@ def build_model(paths: DeckPaths,
                         skipped.append({"name": name, "kind": "pic", "why": "video rId unresolved"})
                         continue
                     used_videos.add(rec["video"])
+                    # Advisory, unread by every renderer -- see _playback_index.
+                    # A LAYOUT's pic is never a target of the SLIDE's timing,
+                    # and its ids live in a different part, so an id match
+                    # there would be a coincidence, not a reference.
+                    _pb = ({} if _from_layout
+                           else playback.get(nv.get("id") if nv is not None else None, {}))
+                    rec["playback"] = _pb.get("playback", "none")
+                    for _k in ("loop", "muted"):
+                        if _k in _pb:
+                            rec[_k] = _pb[_k]
                     if poster:
                         used_images.add(poster)
                 else:
