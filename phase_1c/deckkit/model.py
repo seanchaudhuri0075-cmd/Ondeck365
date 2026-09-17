@@ -39,6 +39,7 @@ from .paths import DeckPaths
 
 R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 ASVG = {"asvg": "http://schemas.microsoft.com/office/drawing/2016/SVG/main"}
+P14 = {"p14": "http://schemas.microsoft.com/office/powerpoint/2010/main"}
 EMU_PT = 12700.0
 OPAQUE_MIN = 0.999
 Image.MAX_IMAGE_PIXELS = None      # deck 8 ships a 42.6 MP plate
@@ -111,8 +112,41 @@ def _rels(paths: DeckPaths, n: int) -> dict:
     if not p.exists():
         return {}
     return {r.get("Id"): {"target": r.get("Target"),
-                          "type": r.get("Type").rsplit("/", 1)[-1]}
+                          "type": r.get("Type").rsplit("/", 1)[-1],
+                          "external": r.get("TargetMode") == "External"}
             for r in etree.parse(str(p)).getroot()}
+
+
+def _video_target(el, rl):
+    """Media filename a video <p:pic> plays, or None.
+
+    PowerPoint writes the payload twice: `<a:videoFile r:link>` (the 2007
+    form) and `<p14:media r:embed>` in the nvPr extLst (2010+). They normally
+    name the same part, but deck 11 (Unilever) slide 16 carries a clip whose
+    videoFile rel is `Target="NULL" TargetMode="External"` while p14:media
+    embeds the real media12.mp4. Reading videoFile alone turned that into a
+    video called "NULL": added to `used_videos`, printed as `MISSING NULL` by
+    the asset stage, and dropped without an error.
+
+    So p14:media wins, and a rel that is External -- or not in the rels at
+    all -- names no part in this package and reads as absent. Nothing here
+    looks at the target STRING; "NULL" is not special, External is.
+    """
+    def part(rid):
+        rel = rl.get(rid) if rid else None
+        if not rel or rel.get("external") or not rel.get("target"):
+            return None
+        return os.path.basename(rel["target"])
+
+    m = el.find(".//p14:media", P14)
+    vf = el.find(".//a:videoFile", NS)
+    for node in (m, vf):
+        if node is None:
+            continue
+        hit = part(node.get(R + "embed")) or part(node.get(R + "link"))
+        if hit:
+            return hit
+    return None
 
 
 def _srcrect(el):
@@ -1102,9 +1136,7 @@ def build_model(paths: DeckPaths,
                     rec["opacity"] = (int(_am.get("amt")) / 100000.0
                                       if _am.get("amt") else 1.0)
                 if vid is not None:
-                    tgt = (rl.get(vid.get(R + "link"), {}).get("target")
-                           or rl.get(vid.get(R + "embed"), {}).get("target"))
-                    rec["video"] = os.path.basename(tgt) if tgt else None
+                    rec["video"] = _video_target(el, rl)
                     if not rec["video"]:
                         skipped.append({"name": name, "kind": "pic", "why": "video rId unresolved"})
                         continue
@@ -1201,6 +1233,7 @@ def build_model(paths: DeckPaths,
             bound.add(bg_img["src"])
         unbound = sorted({v["target"].split("/")[-1] for v in rl.values()
                           if v["type"] in ("image", "video", "media", "hdphoto")
+                          and not v["external"]   # names no part of this package
                           and v["target"].split("/")[-1] not in bound})
         lockers = sum(1 for c in root.find("p:cSld/p:spTree", NS).iter()
                       if etree.QName(c).localname in ("sp", "pic") and _is_design_locker(c))
