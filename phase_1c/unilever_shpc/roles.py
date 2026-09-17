@@ -178,29 +178,120 @@ SUPPRESS_REVIEW_STICKERS = True
 SUPPRESS_OCCLUDED_SHAPES = True
 
 # ---------------------------------------------------------------- fonts
-# TODO -- NOT DECIDED. See DECK11_HANDOFF.md section 4. Do not fill this in by
-# eye, and do not fill it in from a render on this Mac:
+# DECIDED -- Sean, 2026-09-17. Evidence: DECK11_HANDOFF.md, "STEP 11" (width
+# budgets, 33 faces) and "STEP 12" (the shipped files, the Apple path).
 #
-#   SF Pro Semibold   260 runs   35pt display (206 runs), 15/20
-#   SF Pro Medium      66 runs   12/15/16
-#   Helvetica           6 runs
-#   Arial               1 run
-#   League Gothic       1 run    SIL OFL -- ships as itself; binary not bundled yet
+#   SF Pro Semibold   260 runs   35pt display (204 runs), 12/15/20/30
+#   SF Pro Medium      66 runs   15/16/20, two at 35, one at 40
+#   Helvetica           6 runs   -> Liberation Sans (metric-compatible, bundled)
+#   Arial               1 run    -> Liberation Sans
+#   League Gothic       1 run    SIL OFL -- ships as itself; binary NOT bundled yet
 #   Calibri             1 run    inherited theme minor font; identify before bundling
 #
 # SF Pro is 326 of 335 runs (97%) and CANNOT ship: Apple licenses it for UI
-# mock-ups on Apple platforms, not as a web font. A substitute is required and
-# is the largest fidelity decision in this build. It must be made the way
-# Secret's were: width budgets from the authored boxes rule candidates OUT, and
-# the pick among the survivors is a recorded judgement call against Sean's
-# PowerPoint screenshots. SF Pro IS installed on this machine, so a local
-# render will look right and the shipped deck will not -- `local()` must never
-# appear in the @font-face src, and text fit must not be judged here with the
-# local face enabled.
+# mock-ups on Apple platforms, not as a web font. No SF Pro file is shipped or
+# referenced, and `local()` never appears in an @font-face src.
 #
-# Until then there is deliberately no FONT_FAMILIES, no SUBS and no sub_for():
-# a renderer that imports them fails loudly instead of shipping a guess.
-FONTS_DECIDED = False
+# THE SUBSTITUTE IS ARCHIVO AT wdth 90 (SIL OFL 1.1), SemiBold 600 for SF Pro
+# Semibold and Medium 500 for SF Pro Medium. Width budgets ruled candidates
+# OUT; they did not choose. Of 33 faces measured against every authored box,
+# every ordinary grotesque -- Inter at both optical sizes and Inter Tight
+# included -- makes lines wrap that do not wrap in SF Pro, and the only strict
+# survivors are condensed display faces. Archivo at wdth 90 (96.6% of SF Pro's
+# width) causes ZERO new wraps; 324 of 326 runs fit. Its whole failure is the
+# centred 16pt badge digit "1" on slides 2 and 3, which overhangs a
+# wrap="none" hug-box by 0.32pt (SF Pro's "1" is unusually narrow) and cannot
+# wrap. Sean accepted that overhang and picked Archivo from the three
+# near-misses shown as samples. Re-measured on the SHIPPED woff2, and in
+# Chrome on all 35 slides: same result.
+#
+# HYBRID BY SIZE -- and why it is not simply "-apple-system first". The first
+# decision was to let Apple devices use their installed SF Pro for every run.
+# Measured in Chrome on this Mac, that fails the same rule Archivo passes:
+# `-apple-system` is the SYSTEM font, with size-dependent tracking and optical
+# sizing, not SF-Pro.ttf's Semibold/Medium at opsz 28 that PowerPoint drew
+# (and that reproduces this deck's autofit boxes). It runs +9.8% wide at 15px,
+# +4.9% at 20px, +2.9% at 26-28px, +0.7% at 61px. On all 35 slides at 1680 and
+# 1920px canvases that is 3 paragraphs gaining a line (slide 3 "Custom AI
+# workflow with storytelling for product & brand.", slide 5 "Intake
+# (Slack/Jira/Email)" and "Delivery + version pack") and 10 no-wrap labels on
+# slides 2-3 overhanging by 1.0-3.8pt. Pinning 'opsz' 28 or
+# font-optical-sizing:none does not fix it. Every run of 30pt and up fits.
+# So: runs of APPLE_MIN_PT and up take the Apple entries first; runs under it
+# are Archivo on EVERY device. Checked in Chrome at 960/1280/1680/1920px
+# canvases, all 35 slides, both paths: 0 new wraps, only the badge "1".
+#
+# QA RULE (handoff section 4): on this Mac `-apple-system` resolves to the real
+# system font, so a fit check of the NON-Apple path must force Archivo --
+# render with APPLE_SYSTEM removed from the stack (`stack_for(..., apple=False)`).
+# Safari or Chrome on this Mac, untouched, tests the Apple path alone. And the
+# Apple path can only be checked in a real browser: no font file models it.
+FONTS_DECIDED = True
+FONTS_DECIDED_ON = "2026-09-17"
+
+ARCHIVO_FAMILY = "Archivo wdth90"   # its own CSS name: NOT the registry's variable 'Archivo'
+APPLE_SYSTEM = ("-apple-system", "BlinkMacSystemFont")
+APPLE_MIN_PT = 30.0                 # sizes in this deck: 30/35/40 above it, 12/15/16/20 below
+FALLBACKS = ("'Helvetica Neue'", "Helvetica", "Arial", "sans-serif")
+
+# One variable file, wdth pinned at 90, wght 500-600: 21,228 B against 25,844 B
+# for two statics. 229 codepoints: Basic Latin, Latin-1 and common punctuation,
+# including the x, non-breaking hyphen (U+2011) and infinity this deck uses and
+# the repo's older Archivo-var.woff2 subset lacks, plus U+2212. Built from
+# google/fonts ofl/archivo at the commit below; SOURCE.md beside the file has
+# the recipe, and OFL.txt beside it is the licence. Paths are repo-relative.
+FONT_FILES = {
+    ARCHIVO_FAMILY: {
+        "path": "ondeck/render/fonts/archivo_wdth90/Archivo-wdth90-wght500-600.woff2",
+        "license": "ondeck/render/fonts/archivo_wdth90/OFL.txt",
+        "font_weight": "500 600",
+        "format": "woff2-variations",
+        "bytes": 21228,
+        "sha256": "6e9f1da647173f0641a37885ce011b4aeae10a1152c1ff66c87bd3485ceeb040",
+        "source": "https://github.com/google/fonts/blob/ea9bc40cb0323afec81e7f1005453eea36f51708/"
+                  "ofl/archivo/Archivo%5Bwdth%2Cwght%5D.ttf",
+        "source_commit": "ea9bc40cb0323afec81e7f1005453eea36f51708",
+        "source_sha256": "0e094a7d3c7c4c25cf1310c4b30014f1dae9332220b1c2c88f4fa996f0b05053",
+    },
+}
+# Bundled already (ondeck/render/fonts.py registry), named here so a renderer's
+# font_face_css(families=...) call can be built from this file alone.
+FONT_FAMILIES = ("Liberation Sans",)
+
+LIBERATION_STACK = "'Liberation Sans',Helvetica,Arial,sans-serif"
+
+# typeface (lowercased) -> weight, and whether the Apple entries may lead.
+SUBS = {
+    "sf pro semibold": {"family": ARCHIVO_FAMILY, "weight": 600, "apple": True},
+    "sf pro medium":   {"family": ARCHIVO_FAMILY, "weight": 500, "apple": True},
+    # web-safe, metric-compatible (section 4)
+    "helvetica":       {"stack": LIBERATION_STACK, "weight": None},
+    "arial":           {"stack": LIBERATION_STACK, "weight": None},
+}
+# Section 4's two open gaps, one run each. Deliberately NOT mapped: a renderer
+# that reaches one fails loudly instead of shipping a guess.
+FONTS_PENDING = {
+    "league gothic": "SIL OFL, ships as itself -- add the woff2 first (1 run, slide 13)",
+    "calibri":       "1 inherited run (slide 35); identify it before bundling Carlito",
+}
+
+
+def stack_for(size_pt, apple=True):
+    """CSS font-family for an SF Pro run of `size_pt`. `apple=False` is the QA
+    switch: the non-Apple path, which this Mac cannot otherwise show."""
+    lead = APPLE_SYSTEM if (apple and size_pt is not None and size_pt >= APPLE_MIN_PT) else ()
+    return ",".join(lead + ("'%s'" % ARCHIVO_FAMILY,) + FALLBACKS)
+
+
+def sub_for(typeface, size_pt=None, apple=True):
+    key = str(typeface or "").strip().lower()
+    if key in FONTS_PENDING:
+        raise NotImplementedError("%s: %s" % (typeface, FONTS_PENDING[key]))
+    sub = SUBS[key]          # an unknown face is a KeyError, not a default
+    if "stack" in sub:
+        return {"stack": sub["stack"], "weight": sub["weight"]}
+    return {"stack": stack_for(size_pt, apple=apple and sub["apple"]), "weight": sub["weight"]}
+
 
 # PowerPoint's autofit constant -- face- and size-independent per the four-deck
 # fit recorded in secret/roles.py. Carries over unchanged.

@@ -222,6 +222,46 @@ Darker Grotesque).
 `SOURCE_LINE_HEIGHT = 1.21172` carries over unchanged (it is face- and
 size-independent per Secret's four-deck fit).
 
+### DECIDED 2026-09-17 (Sean) -- Archivo at wdth 90, hybrid by size
+
+Gap 1 above is closed; the evidence is in "STEP 11" and "STEP 12" at the end
+of this file, and the decision is data in `phase_1c/unilever_shpc/roles.py`.
+
+| runs | font-family | weight |
+|:--|:--|:--|
+| SF Pro Semibold, **30pt and up** | `-apple-system, BlinkMacSystemFont, 'Archivo wdth90', 'Helvetica Neue', Helvetica, Arial, sans-serif` | 600 |
+| SF Pro Medium, **30pt and up** | same | 500 |
+| SF Pro Semibold / Medium, **under 30pt** | `'Archivo wdth90', 'Helvetica Neue', Helvetica, Arial, sans-serif` -- Archivo on EVERY device | 600 / 500 |
+| Helvetica, Arial | Liberation Sans (unchanged) | as authored |
+| League Gothic, Calibri | unchanged: gaps 2 and 3 above, still open, one run each | |
+
+No SF Pro file is shipped or referenced, ever; `local()` never appears. Apple
+devices draw the 210 display runs (30/35/40pt) in their own system font; every
+other device, and every run under 30pt on all devices, is Archivo at wdth 90
+from `ondeck/render/fonts/archivo_wdth90/` (21,228 B, SIL OFL, `OFL.txt` and
+`SOURCE.md` beside it).
+
+### QA RULE -- this Mac can only see half of this deck's typography
+
+**On this Mac `-apple-system` resolves to the real system SF Pro.** Opening the
+deck in Safari or Chrome here tests the APPLE path alone, however many
+browsers are tried.
+
+1. **Every fit check of the non-Apple path must FORCE Archivo:** render with
+   the `-apple-system` and `BlinkMacSystemFont` entries REMOVED from the stack
+   (`roles.stack_for(size, apple=False)` / `roles.sub_for(face, size,
+   apple=False)`), then check. That render is what Windows, Android and Linux
+   draw. A check that skips this has not checked them.
+2. **The Apple path can only be checked in a real browser on an Apple
+   device.** `-apple-system` is not `SF-Pro.ttf`: the system font carries
+   size-dependent tracking and optical sizing, and measured +9.8% wide at 15px,
+   +4.9% at 20px, +2.9% at 26-28px and +0.7% at 61px against the SF Pro
+   Semibold/Medium (opsz 28) that PowerPoint drew. No font file on disk models
+   it; a fontTools measurement of `SF-Pro.ttf` says nothing about it.
+3. Both checks, every time text or geometry changes. The standing reference
+   is `~/DeckBuild/unilever_shpc/font_samples/fit_all.html` (all 35 slides,
+   both paths side by side, live line-count and overhang report per column).
+
 ---
 
 ## 5. Classification — CREATIVE (QA routing only)
@@ -898,7 +938,7 @@ Open under this item now: **only the off-site third copy.**
 
 ### 5. Decisions needed from Sean before the first encode
 
-~~Strip audio or keep it (7.3)~~ · the SF Pro substitute (section 4) · the R2
+~~Strip audio or keep it (7.3)~~ · ~~the SF Pro substitute (section 4)~~ · the R2
 prefix · ~~whether click-to-play clips stay click-to-play (7.6)~~.
 
 **SETTLED 2026-09-17 — audio and playback come from the deck's own XML, not
@@ -919,7 +959,9 @@ from a preference.**
   the author -- wait for the viewer; the 43 `auto` clips start on entry,
   subject to the load gate in 7.6.
 
-Still open here: the SF Pro substitute and the R2 prefix.
+~~Still open here: the SF Pro substitute and the R2 prefix.~~ **The SF Pro
+substitute was settled 2026-09-17 (section 4, STEP 12). Still open here: the
+R2 prefix only.**
 
 ---
 
@@ -1119,3 +1161,301 @@ the R2 prefix; `editor_roundtrip.py`; the off-site third copy of the source
 decks (OPEN ITEMS 1, 2, 4, 5). `media11` (9.99 -> 8.64 MB) and `media36`
 (6.73 -> 5.90 MB) remain re-encoded: marginal, but they do come out smaller,
 so the rule still earns its keep on them.
+
+---
+
+# STEP 11 -- SF Pro substitute: width budgets and samples, 2026-09-17
+
+**No font has been chosen. `roles.py` is unchanged (`FONTS_DECIDED = False`).
+Nothing uploaded, nothing committed; this section is itself uncommitted.**
+
+*(That was the state when this section was written. The font was chosen the
+same day -- see STEP 12 -- and both sections were committed together.)*
+
+## Housekeeping recorded here
+
+* **`775b9ee` (BUILD 2) is pushed.** Sean ran the push on 2026-09-17; the
+  reflog shows `origin/main` moving `a8c0fec..775b9ee` at 05:43:04 -0400, and
+  `git ls-remote origin refs/heads/main` returns `775b9ee`, equal to local
+  `HEAD`. The classifier block on `git push` from a session still stands.
+* **The R2 prefix is UNDECIDED.** `roles.R2_PREFIX = None`. It must not collide
+  with `olay`, `olay-v2`, `oldspicepackaging`, `hh-creativestrategy`,
+  `pgdigital`, `venus-hestia` (section 6). Nothing has been uploaded to R2.
+
+## Method
+
+Every one of the 326 SF Pro runs (non-blank text; 260 Semibold + 66 Medium) was
+laid out inside its authored box from `out/unilever_shpc/model.json`: inner
+width = `w` minus the l/r insets, greedy word wrap for `wrap="square"`, no wrap
+for `wrap="none"`, at the authored size. Advances are the real `hmtx` advances
+plus the `kern` feature's GPOS pair kerning, read from the font files with
+fontTools (no shaper is installed; ligatures and contextual kerning are not
+modelled). Weights: Semibold -> 600, Medium -> 500 where the file has them; the
+table says where it does not.
+
+**The SF Pro reference** is `/Library/Fonts/SF-Pro.ttf` (the variable file)
+instantiated at its own named instances -- Semibold = `wght 590`, Medium =
+`wght 510`, `opsz 28`, `wdth 100`. Two calibrations against the deck itself:
+
+* The 10 `wrap="none"` + `<a:spAutoFit/>` label boxes on slides 2-3 hug their
+  text, so box inner width = PowerPoint's own measure of the string. Kerned
+  SF Pro at `opsz 28` lands 0.9-2.4pt (0.5-1.1%) UNDER every one of them;
+  `opsz 17` (the Text cut) is 11-13% over, so it is not what PowerPoint drew.
+* Predicted autofit height, `0.07034 + 1.21172 x sum(lines x size x spcPct) +
+  insets`, from the SIMULATED line counts, matches the authored `h` to <0.5pt on
+  89 of 110 autofit boxes; the other 21 are 20 boxes with an empty trailing
+  paragraph (off by exactly one line of that paragraph's size) and the League
+  Gothic box. No SF Pro paragraph wraps differently in the simulation than in
+  PowerPoint. `SOURCE_LINE_HEIGHT = 1.21172` is used throughout.
+
+The measurement was then checked in a real browser: headless Chrome's
+`Range.getBoundingClientRect()` widths on the sample page agree with the
+fontTools figures to within ~0.2pt (SF Pro "Efficiency and cost savings"
+233.44 vs 233.50; Source Sans 3 "1" 8.09 vs 8.10; Archivo wdth 90 "1" 7.91 vs
+7.90).
+
+**The test, per SF Pro line:** the text that sits on ONE line in SF Pro must
+still fit on one line in the candidate. If it does not, the line *newly wraps*
+(`wrap="square"`) or *overflows* (`wrap="none"`, or a single unbreakable word).
+A run fails if it touches such a line. (A first draft flagged any moved break
+position; that also failed every condensed face, because a narrower face pulls
+words UP a line. That is a reflow, not a new wrap, and is not counted.)
+
+## Width-budget table
+
+`width` = candidate's total advance over SF Pro's, summed over all 326 runs'
+paragraphs. `fit` is out of 326.
+
+| candidate | weights used (semibold/medium) | width vs SF Pro | fit | runs newly wrapping | runs overflowing | worst run | strict verdict |
+|:--|:--|--:|--:|--:|--:|:--|:--|
+| Anton | 400/400 | 90.1% | 326 | 0 | 0 | — | **fits** |
+| Big Shoulders | 700/700 | 87.2% | 326 | 0 | 0 | — | **fits** |
+| Darker Grotesque | 600/500 | 86.8% | 326 | 0 | 0 | — | **fits** |
+| Barlow Condensed | 700/500 | 81.4% | 326 | 0 | 0 | — | **fits** |
+| PT Sans Narrow | 400/400 | 79.8% | 326 | 0 | 0 | — | **fits** |
+| Bebas Neue | 400/400 | 76.0% | 326 | 0 | 0 | — | **fits** |
+| Archivo (wdth 90) | 600/500 | 96.6% | 324 | 0 | 2 | s2, 16pt, overflow +0.3pt: “1” | OUT |
+| Roboto Condensed | 600/500 | 91.9% | 324 | 0 | 2 | s2, 16pt, overflow +0.4pt: “1” | OUT |
+| Source Sans 3 | 600/500 | 96.9% | 323 | 0 | 3 | s2, 16pt, overflow +0.5pt: “1” | OUT |
+| Archivo (wdth 95) | 600/500 | 100.9% | 320 | 2 | 4 | s2, 20pt, overflow +2.4pt: “Endless possibilities” | OUT |
+| Inter Tight | 600/500 | 102.1% | 316 | 3 | 7 | s3, 15pt, wraps +8.3pt: “Custom AI workflow with storytelling for…” | OUT |
+| Urbanist | 600/500 | 101.9% | 313 | 4 | 9 | s3, 15pt, wraps +13.3pt: “Custom AI workflow with storytelling for…” | OUT |
+| Inter Display (opsz 32) | 600/500 | 103.2% | 310 | 6 | 10 | s3, 15pt, wraps +12.3pt: “Custom AI workflow with storytelling for…” | OUT |
+| Roboto | 600/500 | 103.0% | 306 | 8 | 12 | s3, 15pt, wraps +17.0pt: “Custom AI workflow with storytelling for…” | OUT |
+| Archivo (wdth 100) | 600/500 | 105.2% | 305 | 9 | 12 | s3, 15pt, wraps +13.4pt: “Custom AI workflow with storytelling for…” | OUT |
+| Liberation Sans | 700/400 | 108.1% | 305 | 10 | 11 | s4, 15pt, wraps +20.4pt: “Weekly drops, A/B subject + hero” | OUT |
+| Hanken Grotesk | 600/500 | 103.4% | 303 | 11 | 12 | s3, 15pt, wraps +23.4pt: “Custom AI workflow with storytelling for…” | OUT |
+| Figtree | 600/500 | 104.3% | 303 | 13 | 10 | s3, 15pt, wraps +24.2pt: “Custom AI workflow with storytelling for…” | OUT |
+| Instrument Sans (wdth 100) | 600/500 | 107.2% | 300 | 16 | 10 | s3, 15pt, wraps +32.9pt: “Custom AI workflow with storytelling for…” | OUT |
+| Manrope | 600/500 | 107.2% | 299 | 17 | 10 | s3, 15pt, wraps +31.4pt: “Custom AI workflow with storytelling for…” | OUT |
+| IBM Plex Sans (wdth 100) | 600/500 | 106.3% | 298 | 14 | 14 | s3, 15pt, wraps +29.7pt: “Custom AI workflow with storytelling for…” | OUT |
+| DM Sans (opsz 14) | 600/500 | 108.9% | 298 | 18 | 10 | s3, 15pt, wraps +38.9pt: “Custom AI workflow with storytelling for…” | OUT |
+| Schibsted Grotesk | 600/500 | 109.6% | 298 | 18 | 10 | s3, 15pt, wraps +39.6pt: “Custom AI workflow with storytelling for…” | OUT |
+| Onest | 600/500 | 108.7% | 297 | 17 | 12 | s3, 15pt, wraps +41.0pt: “Custom AI workflow with storytelling for…” | OUT |
+| Albert Sans | 600/500 | 106.9% | 295 | 15 | 16 | s3, 15pt, wraps +30.5pt: “Custom AI workflow with storytelling for…” | OUT |
+| Geist | 600/500 | 108.7% | 293 | 17 | 16 | s3, 15pt, wraps +34.9pt: “Custom AI workflow with storytelling for…” | OUT |
+| Work Sans | 600/500 | 112.4% | 293 | 23 | 10 | s3, 15pt, wraps +61.3pt: “Custom AI workflow with storytelling for…” | OUT |
+| Public Sans | 600/500 | 108.2% | 292 | 16 | 18 | s3, 15pt, wraps +37.4pt: “Custom AI workflow with storytelling for…” | OUT |
+| Plus Jakarta Sans | 600/500 | 109.4% | 292 | 20 | 14 | s3, 15pt, wraps +41.8pt: “Custom AI workflow with storytelling for…” | OUT |
+| Libre Franklin | 600/500 | 108.9% | 290 | 16 | 20 | s3, 15pt, wraps +37.5pt: “Custom AI workflow with storytelling for…” | OUT |
+| Inter (opsz 14, text) | 600/500 | 110.7% | 289 | 21 | 16 | s3, 15pt, wraps +44.3pt: “Custom AI workflow with storytelling for…” | OUT |
+| Poppins | 600/600 | 115.7% | 283 | 29 | 14 | s35, 20pt, wraps +97.5pt: “We have built engaging social media ads,…” | OUT |
+| Montserrat | 800/800 | 122.4% | 278 | 34 | 14 | s35, 20pt, wraps +144.5pt: “We have built engaging social media ads,…” | OUT |
+
+Sources and licences. **In the repo** (`ondeck/render/fonts/`): Anton, Archivo,
+Barlow Condensed, Bebas Neue, Big Shoulders, Darker Grotesque, Liberation Sans,
+Montserrat, Poppins, PT Sans Narrow, Roboto Condensed -- all SIL OFL 1.1.
+**NOT in the repo, fetched for measurement only, all SIL OFL 1.1:** Inter 4.1
+from the official release `github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip`
+(zip sha256 `9883fdd4a49d4fb6...`); the rest are the variable TTFs under
+`github.com/google/fonts/tree/main/ofl/<family>/`, each with its `OFL.txt`.
+None was added to the repo. Copies: `~/DeckBuild/unilever_shpc/font_samples/measure/ext/`.
+
+## What the table says -- and the conflict in the rule
+
+1. **The 35pt display copy barely discriminates.** Those boxes are wide around
+   one- and two-word lines, so a display run (30pt and up) fails only in the
+   widest faces: 44 run-failures in all, in 16 faces at 105% or more of SF Pro's
+   width (slide 3 and 4 headlines, the slide 16/17/19/20 titles); none in any
+   face at or under 104.3%. **634 of the 655 run-failures summed over all 33
+   candidates are on slides 2-5** (the diagram slides: 15pt card copy, 20pt
+   labels, 16pt badges); the rest are slides 16, 17, 19, 20, 34 and 35's footer.
+2. **SF Pro is narrower than every general-purpose grotesque measured.** Inter
+   -- the obvious first candidate -- is OUT at both optical sizes (text: 37
+   runs, 110.7%; Display: 16 runs, 103.2%), and so is Inter Tight (10 runs).
+3. **Applied strictly, the rule leaves only condensed and display faces**
+   (76-90% of SF Pro's width; Anton, Big Shoulders, PT Sans Narrow and Bebas
+   Neue are single-weight, Bebas has no lowercase). They fit because almost
+   anything that narrow fits; none resembles SF Pro.
+4. **Three faces fail ONLY on hug-boxes that cannot wrap.** Archivo at `wdth`
+   90, Roboto Condensed and Source Sans 3 cause **zero new wraps**. Their whole
+   failure is the centred 16pt badge digit "1" on slides 2 and 3 (inner box
+   7.59pt = SF Pro's unusually narrow proportional "1" at 7.31pt + slack;
+   candidates' "1" is 7.9-8.1pt: **+0.3 to +0.5pt**), plus, for Source Sans 3
+   only, the 20pt label "Differentiation" (+0.4pt by fontTools, +0.1pt in
+   Chrome). Those boxes are `wrap="none"` + spAutoFit: PowerPoint sized them TO
+   the SF Pro string, so "overflows its box" there means "is wider than SF Pro
+   on this string", and the text overhangs rather than wraps -- which Secret's
+   `render.py` already treats as the correct rendering of `wrap="none"`.
+   The rule as stated rules them OUT and the table says so; whether a
+   sub-half-point overhang of a centred digit is disqualifying is **Sean's
+   call**, not a measured result.
+
+Sean's instruction for the samples (2026-09-17, asked before building): show
+the three near-misses, labelled as NOT strict survivors.
+
+Repo-subset caveat: the repo's `Archivo-var.woff2` lacks `×`, `‑` (U+2011) and
+`∞`; `RobotoCondensed-var.woff2` also lacks `°` `–` `—` `‘` `’` `•`. All occur
+in this deck's SF Pro runs (slide 2: `×` `∞` `‑` `—`). Shipping either needs a
+fuller subset from the upstream OFL source. Source Sans 3 and Inter cover all
+of them.
+
+## Samples
+
+    ~/DeckBuild/unilever_shpc/font_samples/        (outside the repo; LOCAL ONLY)
+      index.html          slides 1, 2, 16, 21, 35 at authored geometry, text +
+                          rect fills only, pictures/video as grey placeholders;
+                          4 columns: SF Pro | Source Sans 3 | Archivo wdth 90 |
+                          Roboto Condensed, each labelled with face + weights
+      build_samples.py    regenerates index.html from out/unilever_shpc/model.json
+      fonts/              SF-Pro.ttf is a SYMLINK to /Library/Fonts/SF-Pro.ttf
+      measure/            fm.py, layout.py, measure.py, results.json, ext/ fonts
+
+Candidate `@font-face` rules are `url()` only -- `local(` appears nowhere in
+the page -- and the fallback stack is Liberation Sans, Helvetica, Arial, never
+`system-ui` (which IS SF Pro on a Mac). Each column header shows whether its
+face actually loaded, and a per-column line reports, measured live in the
+browser, any paragraph that gains a line or overhangs versus the SF Pro column.
+Line-height is `spcPct x 1.21172` in every column. **The folder must never be
+uploaded: it serves Apple's SF Pro.**
+
+Served with `python3 -m http.server 52972 --bind 127.0.0.1` from that folder:
+`http://127.0.0.1:52972/index.html`.
+
+## Still open
+
+The SF Pro substitute (Sean's pick, against his PowerPoint screenshots, then
+recorded in `roles.py` with this evidence); the R2 prefix; League Gothic and
+the one inherited Calibri run (section 4); `render.py`, `validate.py`,
+`index.html`, `editor_roundtrip.py`; the off-site third copy of the sources.
+
+---
+
+# STEP 12 -- the font decision, locked: Archivo at wdth 90, hybrid by size, 2026-09-17
+
+**Decided by Sean. Recorded as data in `phase_1c/unilever_shpc/roles.py`
+(`FONTS_DECIDED = True`). No `render.py` yet. Nothing uploaded, nothing
+published. `R2_PREFIX = None`, still undecided. Section 4 carries the stack
+table and the QA rule.**
+
+## The decision, and the one change made to it on evidence
+
+Sean's first decision: `-apple-system, BlinkMacSystemFont`, then Archivo at
+wdth 90, then the existing fallbacks -- Apple devices draw their installed SF
+Pro, everything else draws Archivo (SemiBold 600 for SF Pro Semibold runs,
+Medium 500 for SF Pro Medium runs). No SF Pro file shipped or referenced.
+
+**Measured before it was written down, the Apple half of that fails the
+step-11 rule that Archivo passes.** `-apple-system` is not the SF Pro
+PowerPoint drew. In headless Chrome on this Mac, one 57-character line at
+weight 500, in em:
+
+| font-size | `-apple-system` | `SF-Pro.ttf` Medium, opsz 28 (= PowerPoint) | system vs PowerPoint |
+|--:|--:|--:|--:|
+| 15px | 26.84 | 24.44 | **+9.8%** |
+| 20px | 25.65 | 24.44 | +4.9% |
+| 26px | 25.14 | 24.44 | +2.9% |
+| 28px | 25.15 | 24.44 | +2.9% |
+| 40px | 24.90 | 24.44 | +1.9% |
+| 61px | 24.61 | 24.44 | +0.7% |
+
+The system font carries size-dependent tracking and optical sizing.
+`font-variation-settings:'opsz' 28` changes it (narrower under 28px, identical
+from 28px up) but does not make it the PowerPoint face, and
+`font-optical-sizing:none` changes nothing. With the full Apple stack on all
+35 slides, at 1680px and 1920px canvases alike: **3 paragraphs gain a line**
+(slide 3 "Custom AI workflow with storytelling for product & brand." -- a line
+with 0.16% slack in SF Pro itself; slide 5 "Intake (Slack/Jira/Email)" and
+"Delivery + version pack") and **10 no-wrap labels on slides 2-3 overhang by
+1.0-3.8pt**. Every run of 30pt and up fits.
+
+Put to Sean with four options; he chose **hybrid by size**: runs of 30pt and up
+(210 runs: 30/35/40pt) keep the Apple entries first; runs under 30pt (116 runs:
+12/15/16/20pt) are Archivo on every device. Nothing sits between 20 and 30pt,
+so `APPLE_MIN_PT = 30.0` is not a judgement call on any run.
+
+## 1. The Archivo files
+
+    ondeck/render/fonts/archivo_wdth90/
+      Archivo-wdth90-wght500-600.woff2   21,228 B   sha256 6e9f1da647173f06...ceeb040
+      OFL.txt                             4,388 B   byte-identical to upstream's
+      SOURCE.md                           source commit, hashes, the build recipe
+
+* **Source:** `ofl/archivo/Archivo[wdth,wght].ttf`, Version 2.001, from
+  github.com/google/fonts at commit `ea9bc40cb0323afec81e7f1005453eea36f51708`
+  (git blob `cc64253d...`, sha256 `0e094a7d...`); that file last changed in
+  google/fonts `6c70c829...` (2021-02-04). SIL OFL 1.1.
+* **One variable file, not two statics -- it is smaller:** static 500 = 12,924
+  B, static 600 = 12,920 B (25,844 B together); one file with `wdth` pinned at
+  90 and `wght` restricted to 500-600 = **21,228 B**. Built twice,
+  byte-identical (fontTools 4.60.2, `recalcTimestamp=False`).
+* **229 codepoints:** Basic Latin, Latin-1, common punctuation and signs.
+  **Verified by script: all 79 distinct characters of all 337 Archivo-mapped
+  runs (326 non-blank) in `out/unilever_shpc/model.json` map to a real glyph**,
+  including `×` U+00D7, `∞` U+221E, `°`, `–`, `—`, `‘`, `’`, `•`. One
+  correction to the brief: the hyphen-like character this deck uses (slide 2)
+  is **U+2011 NON-BREAKING HYPHEN, not U+2212 MINUS**. Both are in the subset.
+* The repo's older `Archivo-var.woff2` (Olay, deck 9; baselined byte-for-byte)
+  lacks `×`, U+2011 and `∞` and **was not touched**. The new face takes its own
+  CSS family name, `'Archivo wdth90'`, so the two cannot collide.
+* Features kept: `kern`, `liga`, `locl`, `ccmp`, `frac`, `numr`, `dnom`,
+  `rvrn`. `liga` matters to measurement: browsers apply it, and Archivo's `ff`
+  ligatures are 19-22 units narrower than their parts (`fi`/`fl`: 1-2 wider).
+
+## 2. Fit check on the shipped file -- PASSED, nothing new
+
+The step-11 measurement, re-run against the exact woff2 above (instantiated at
+wght 600 / 500), with and without ligature shaping:
+
+| | fit | runs newly wrapping | runs overflowing | worst |
+|:--|--:|--:|--:|:--|
+| shipped woff2, no liga | 324 / 326 | 0 | 2 | s2 + s3 badge "1", +0.316pt |
+| shipped woff2, liga on (as a browser shapes it) | 324 / 326 | 0 | 2 | same |
+
+Exactly the expected result: the two centred 16pt badge "1"s in their
+`wrap="none"` hug-boxes, +0.32pt, and nothing else. Tightest line that CAN
+wrap: slide 5 "Intake (Slack/Jira/Email)", 2.6% (4.1pt) of slack; then slide 4
+"Weekly drops, A/B subject + hero", 3.5%.
+
+**And in a real browser, all 35 slides** (`fit_all.html`, headless Chrome, at
+960 / 1280 / 1680 / 1920px canvases): the non-Apple path (Apple entries
+removed) and the hybrid stack as written (= the Apple path, on this Mac) each
+keep SF Pro's line count in every paragraph; the only overhang either reports
+is the badge "1", +0.32-0.33pt, on slides 2 and 3.
+
+## 5. Sample page
+
+`~/DeckBuild/unilever_shpc/font_samples/index.html` now has six columns: SF
+Pro reference, the three step-11 near-misses, **column 5 = the shipped stack
+with the Apple entries removed, loading the new woff2**, and column 6 = the
+shipped hybrid stack as written. Column 5 against the step-11 Archivo column
+(the repo's variable file at `wdth` 90): **0 paragraphs with a different line
+count on any of the 35 slides at any of the four widths**; paragraph widths
+agree to 0.05-0.42pt (the largest is slide 2's "10×", where the old subset has
+no `×` and falls back; the rest is the instancer's per-glyph rounding). One
+honest exception: at a 960px canvas slide 35's two-line footer breaks one word
+apart in the two columns (same line count, 25.8pt width difference); at 1280,
+1680 and 1920px they are identical. `fit_all.html` is the same page for all 35
+slides; both rebuild from `build_samples.py` (`--all`). `local(` appears in
+neither. Served at `http://127.0.0.1:52972/index.html` (and `/fit_all.html`).
+**LOCAL ONLY -- the folder symlinks Apple's SF Pro for the reference column.**
+
+## Still open
+
+The R2 prefix; League Gothic's woff2 and the one inherited Calibri run
+(`roles.FONTS_PENDING` -- `sub_for` raises on both rather than guess); the new
+`render.py` (which must register `'Archivo wdth90'` for embedding --
+`ondeck/render/fonts.py` was deliberately not touched in this step),
+`validate.py`, `index.html`, `editor_roundtrip.py`; the off-site third copy of
+the sources. The mobile DOM sets its own type sizes, so the 30pt threshold
+must be re-checked there against rendered px, in a real browser, on a phone.
