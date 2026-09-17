@@ -51,8 +51,12 @@ def build(pptx: Path, raw: Path, out: Path, shots: Path) -> tuple[DeckPaths, dic
     # clips are already 0.97-2.73 Mbps, so re-encoding is generation loss
     # bought with CPU. The container is still rewritten for +faststart and -an,
     # which is why six of seven change size while none is re-encoded.
+    # deck=deck switches on the crop-window image rule. It changes nothing
+    # for this deck (every image is served by MAX_DIM; 72/72 byte-identical),
+    # and is passed so that the regeneration gate exercises the rule rather
+    # than proving only that the old path still exists.
     man = dkassets.build_all(paths, used_images, used_videos,
-                             video_kw={"copy": True})
+                             video_kw={"copy": True}, deck=deck)
     return paths, deck, man
 
 

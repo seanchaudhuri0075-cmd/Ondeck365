@@ -507,6 +507,23 @@ Each was found by measurement, not anticipated.
    `roles.py` passed through `video_kw`, or a measured bitrate threshold
    (3 Mbps separates the two populations cleanly here: nothing sits between
    2.82 and 3.99). A per-deck measured call either way, per the docstring.
+
+   **FIXED 2026-09-17.** `build_videos(..., modes={name: "copy" | "encode" |
+   {copy, crf, preset, bitrate}}, audio="strip" | "keep")`. A file the map does
+   not name takes the call's own mode, so a map of the exceptions is enough; a
+   name the deck does not use is an error, not a no-op. `audio="keep"`
+   preserves the track on both paths -- copied as-is when the video is
+   stream-copied and the track is already AAC, otherwise encoded to AAC 160k
+   (so a PCM `.mov` still lands in an mp4) -- and a silent source stays silent
+   without failing. A keep/mapped build records `"mode"` and `"audio"` (does
+   the OUTPUT carry a track) per file. **The default call is unchanged to the
+   byte and writes no new key**: pinned by a test that builds the old call and
+   the spelled-out defaults side by side, and by Secret's 7 videos.
+   One hazard NOT fixed, because it predates this and no deck has hit it:
+   outputs are named by SOURCE hash and an existing file is reused, so
+   re-running with a different mode or `audio` into a populated `out/` keeps
+   the old bytes. Deck 11 must be built into an empty `out/unilever_shpc/`;
+   `out_sha256` will show it if that is ever forgotten.
 3. **`-an` strips audio from all 49 outputs.** Correct for Secret's silent
    loops. Here 48 clips have audio and the content is TV commercials, UGC
    testimonials and a slide whose own copy says "Voiceover". The editor's
@@ -520,6 +537,43 @@ Each was found by measurement, not anticipated.
    single-frame WebP of frame 0. Needs a GIF→mp4 path rendered as a muted
    looping `<video>`, or animated WebP. Note it is a `<p:pic>` image, so the
    editor will see it as an image either way.
+
+   **FIXED 2026-09-17.** A GIF with more than one frame keeps its ordinary
+   manifest entry -- the frame-0 WebP this stage always made, now its poster
+   -- and gains an `"animated"` block: a silent H.264 clip of every frame
+   (`vid_<source sha>.mp4`), with `frames`, `loop` (from the GIF's own loop
+   count), `matte`, probed size, `out_bytes` and `out_sha256`. A renderer that
+   has never heard of the block still gets a correct still. yuv420p needs even
+   edges, so the odd row is CROPPED (1000x571 -> 1000x570), never resampled;
+   frame delays come through untouched. `model.json` marks the shape
+   `"animated_gif": true` and leaves it `type: "image"`, so the editor still
+   sees a picture. No renderer reads either yet. Single-frame GIFs take the
+   WebP path exactly as before.
+
+   Measured on this deck (model + `build_images` only, scratch, deleted):
+   poster `img_cbfe6e8e1f0e.webp` 1000x571, 0.009 MB; clip
+   `vid_cbfe6e8e1f0e.mp4` 1000x570, **3,708,587 B**, 1,187 frames, loops --
+   from a 25.54 MB GIF.
+
+   **Transparency, settled from XML and file structure, not from pixels.**
+   The colour behind `image45.gif` is **#FFFFFF**: slide 26 has no `<p:bg>`,
+   `slideLayout13` has none, the master's is `<p:bgRef idx="1001">` ->
+   `schemeClr bg1` -> clrMap `bg1=lt1` -> theme `lt1` = `FFFFFF`, and the GIF
+   is the bottom-most shape in the spTree with nothing under it. ffmpeg, left
+   alone, flattens GIF transparency onto **white** -- measured on a synthetic
+   half-transparent GIF and pinned by a test (the test was first written
+   expecting black, and failed; so was the first docstring). The two colours
+   agree, so nothing needed re-emitting: built with and without the explicit
+   matte, the clip is **byte-identical** (sha256 `e60be9a502dc30ce…`). It is
+   moot twice over, because although the GIF DECLARES a transparency index
+   (55), not one of its 1,187 composited frames has a non-opaque pixel -- the
+   index is only inter-frame delta coding. White is nonetheless right by luck
+   and wrong for any other ground (Secret's is `#A7C6ED`), so the colour is now
+   explicit: `deckkit.assets.image_mattes(deck)` reads the opaque colour
+   directly behind each animated GIF from the model (nearest covering solid
+   fill, else slide bg, else master bg; NO entry over a photo, gradient,
+   translucent fill or a layout that paints nothing), and the clip is
+   composited over a painted copy of its own frames so nothing is retimed.
 5. **`MAX_DIM` crushes slide 30.** `image50.png` is 1920x9419 (a full-length
    page capture) shown three times as three cropped windows (`srcRect` top
    0-27%, 40-70%, 70-100%), each ~364-401 pt wide. `MAX_DIM = 2000` applies to
@@ -527,6 +581,48 @@ Each was found by measurement, not anticipated.
    ~700 px wide on a 1680 canvas. Crops stay in CSS by design (reversible in
    the editor), so the fix is a per-asset `max_dim` override or a
    short-edge-aware cap, not baking the crop.
+
+   **FIXED 2026-09-17 -- with one deliberate departure from the brief, and one
+   re-baselined Secret asset.** `build_all(..., deck=deck)` computes, per
+   image, the full-image size its largest displayed `srcRect` window needs
+   (`image_needs`: box / window-fraction, over every use incl. video posters
+   and `<p:bg>`). Crops stay in CSS; the whole file always ships.
+
+   The brief said: size from the window at 2x a 1920-px canvas, capped at
+   source, and leave images that are fine today byte-identical. Measured
+   BEFORE coding, those two collide: at the 3840 standard **7 of Secret's 65
+   images** fall short today (MAX_DIM trims several large photos), so applying
+   it across the board re-sizes shipped decks as a side effect. The rule
+   therefore uses TWO canvases (`_window_scale`): the FLOOR asks whether
+   MAX_DIM is failing the image against MAX_DIM's own standard -- one 1920-px
+   canvas -- and if not, the image takes the old code path and the old bytes;
+   only an image that fails the floor is lifted, to the TARGET of 2x that
+   canvas, never past its source. `"lifted_from"` records what MAX_DIM alone
+   would have shipped. Re-sizing the other six to the 3840 standard is a
+   legitimate future re-baseline; it is not smuggled into this one.
+
+   On this deck: **`image50.png` 408x2000 -> 1605x7872** (0.95 MB), the only
+   one of 55 images lifted. Image output total 3.10 MB -> 3.91 MB of WebP, plus
+   the 3.71 MB GIF clip = 7.62 MB.
+
+   **Secret re-baseline -- `image65.png`, 2026-09-17, on Sean's decision.**
+   The floor caught one Secret image that really is short today: slide 30
+   `Picture 12`, a 2400x1920 source shown through a 36.3% x 65.6% window in a
+   box 747x1080 px on a 1920-px canvas; MAX_DIM's 2000x1600 gave that window
+   726x1050 -- 2.8% under 1:1. It now ships whole:
+
+       out/secret/assets/img_037499090073.webp
+       old  2000x1600   87,660 B  sha256 7b8f4025f9edb842d73fde9578c562a77f3bbc4e84ce6c7fa814098f37cbfc2a
+       new  2400x1920  115,988 B  sha256 d1e1f685912e110ea69127bb12f68544429770f542d50ae93d7eb80f1c693569
+
+   Same filename (assets are named by source hash), so `index.html` is
+   byte-identical (`b3933c4cf6b5ed86…`), as are `model.json`,
+   `used_assets.json`, the other 71 assets and every other manifest entry.
+   **The live Secret site was NOT republished and still serves the old file.**
+   Full record in `DECK10_MOBILE_HANDOFF.md`. Gate:
+   `tools/strip_compare.py <regen> --allow --rev <pre-rebaseline commit>
+   --allow-assets image65.png` -> "71 of 72 identical + 1 allowed"; against
+   the re-baseline commit itself, 72 of 72 with no allowance.
 6. **Playback intent is not read.** All 23 video slides carry `mediacall` timing that
    distinguishes autoplay (`withEffect`) from click-to-play (`clickEffect`);
    e.g. slide 14's TVC is click-to-play, slide 16's four clips autoplay.
@@ -601,8 +697,10 @@ unzip → `DeckPaths(...)` directly, not `for_deck` → `dkmodel.write_model` �
 substitution with its evidence, video mode map), a **new** `render.py`
 (OPEN ITEMS 2), `validate.py`. **No `model.py`** — `deckkit/model.py` is the
 parser. Items 1, 2, 4, 5 and 8 above are deckkit changes and land there, not
-in a deck-local fork. (1, 6 and 8 are done — see their FIXED notes. 2, 4 and 5
-remain. Additive deckkit changes are gated with `tools/strip_compare.py`.)
+in a deck-local fork. (1, 2, 4, 5, 6 and 8 are all done as of 2026-09-17 — see
+their FIXED notes. Open in this list: 3 is now a settled decision (section 9
+item 5), 6's LOAD half and 7 belong to the new `render.py`, 9 and 10 stand.
+deckkit changes are gated with `tools/strip_compare.py`.)
 
 ---
 
@@ -790,5 +888,25 @@ Open under this item now: **only the off-site third copy.**
 
 ### 5. Decisions needed from Sean before the first encode
 
-Strip audio or keep it (7.3) · the SF Pro substitute (section 4) · the R2
-prefix · whether click-to-play clips stay click-to-play (7.6).
+~~Strip audio or keep it (7.3)~~ · the SF Pro substitute (section 4) · the R2
+prefix · ~~whether click-to-play clips stay click-to-play (7.6)~~.
+
+**SETTLED 2026-09-17 — audio and playback come from the deck's own XML, not
+from a preference.**
+
+* **Audio is kept in every file.** Build with `audio="keep"` on both the copy
+  and the re-encode path (7.2). Nothing is stripped at the asset stage, because
+  what is stripped there cannot be given back on the page.
+* **Muting follows `model.json`.** A clip whose `<p:cMediaNode>` states
+  `mute="1"` (27 of 49) plays muted; the page mutes it, the file does not. A
+  clip that states nothing is not muted by assumption -- and browsers refuse
+  unmuted autoplay, so an `auto` clip with no stated mute is a case the new
+  `render.py` must handle explicitly (muted autoplay with an unmute control,
+  or wait for a gesture) rather than discover on a phone. There are 16 such
+  clips: the 43 auto less the 27 stated muted.
+* **Click-to-play follows `playback`.** The six `click` clips -- `media10`,
+  `media27`-`media30`, `media47`, the long spoken films, none of them muted by
+  the author -- wait for the viewer; the 43 `auto` clips start on entry,
+  subject to the load gate in 7.6.
+
+Still open here: the SF Pro substitute and the R2 prefix.

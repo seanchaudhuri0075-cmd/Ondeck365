@@ -149,6 +149,15 @@ def _video_target(el, rl):
     return None
 
 
+def _gif_frames(path: Path) -> int:
+    """Frame count of a GIF; 1 for anything else, and 1 when the media is not
+    on disk (an XML-only dry run must not fail on a picture it cannot open)."""
+    if path.suffix.lower() != ".gif" or not path.exists():
+        return 1
+    with Image.open(path) as im:
+        return getattr(im, "n_frames", 1)
+
+
 _P = "{%s}" % NS["p"]
 _TRUE = ("1", "true")
 
@@ -1254,6 +1263,15 @@ def build_model(paths: DeckPaths,
                         continue
                     if poster:
                         used_images.add(poster)
+                        # A <p:pic> whose blip is an ANIMATED GIF is a picture
+                        # to PowerPoint and a film to the viewer (deck 11 slide
+                        # 26: 1,187 frames, the slide's main content). It stays
+                        # type "image" -- the editor sees a picture, and the
+                        # asset stage still ships frame 0 as a WebP -- and this
+                        # flag tells a renderer the manifest entry also carries
+                        # an "animated" clip. No renderer reads it yet.
+                        if _gif_frames(paths.media / poster) > 1:
+                            rec["animated_gif"] = True
                     if svg_src:
                         used_images.add(svg_src)
                 rec["from_layout"] = _from_layout

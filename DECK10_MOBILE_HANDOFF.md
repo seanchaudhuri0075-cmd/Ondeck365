@@ -901,6 +901,58 @@ Still live from 820px to ~1280px canvas width. See the OPEN ITEM above; fixing
 it means emitting a `font-size` on `p.t` and re-taking the standing test
 baseline a second time.
 
+## RE-BASELINED 2026-09-17 — one asset, `image65.png`
+
+**A deliberate change to a shipped artifact, made on Sean's decision. The only
+one since FINAL STATE, and the second time this deck's baseline has moved on
+purpose (the first was the `<video>` attribute fix).**
+
+    out/secret/assets/img_037499090073.webp        (source: ppt/media/image65.png, 2400x1920)
+    old  2000x1600   87,660 B  sha256 7b8f4025f9edb842d73fde9578c562a77f3bbc4e84ce6c7fa814098f37cbfc2a
+    new  2400x1920  115,988 B  sha256 d1e1f685912e110ea69127bb12f68544429770f542d50ae93d7eb80f1c693569
+
+**Why.** Deck 11 exposed a flaw in `deckkit.assets`: `MAX_DIM = 2000` caps the
+long edge of the FILE, but a picture shown through a `srcRect` crop only ever
+shows a window of it, so the cap can starve the window (deck 11 slide 30: a
+1920x9419 capture shipped at 408 px wide). The fix asks, per image, whether
+MAX_DIM leaves its largest displayed window short of one source pixel per pixel
+of a 1920-px canvas -- MAX_DIM's own standard -- and lifts only those that fail
+(`_window_scale`; see `DECK11_HANDOFF.md` section 7 item 5). Run across this
+deck it found exactly one: **slide 30, `Picture 12`**. The window is 36.3% x
+65.6% of the source (crop l 0.298, t 0.344, r 0.339), its box is 38.9% x 100%
+of the canvas = 747x1080 px at 1920, and the old 2000x1600 file gave that window
+726x1050 px: 2.8% short of 1:1, so the browser was upscaling it. The source is
+only 2400x1920, so it now ships whole. The other 64 images pass the floor and
+are byte-identical; so are the 7 videos.
+
+**What moved and what did not.** One blob and one manifest entry
+(`out_w`/`out_h`/`out_bytes`/`out_sha256`, plus a new `"lifted_from": [2000,
+1600]`). The filename is unchanged because assets are named by SOURCE hash,
+so `index.html` is byte-identical (`b3933c4cf6b5ed86…`, 813,433 B), and so are
+`model.json` and `used_assets.json`. `assets/` is now 72 files, 19,335,062 bytes
+(was 19,306,734; +28,328). `phase_1c/secret/build.py` now passes `deck=deck` to
+`build_all`, which is what switches the rule on; regeneration from the T7 source
+reproduces the new state byte for byte.
+
+**NOT republished.** The live Secret site was not touched and **still serves
+the old 2000x1600 file**; so does whatever R2 holds. Two local copies are now
+stale by this one image and were left alone: `out/secret/index.standalone.html`
+(untracked; inlines the old bytes -- re-run `tools/inline_deck.py out/secret`
+before using it) and `~/ondeck-secret-backup-2026-08-29/` (a dated backup, which
+is supposed to be old). Republishing is a separate decision: the visible gain is
+a 2.8% sharper crop on one slide.
+
+**Gate.** `python3 tools/strip_compare.py <regen> --allow --rev 3699fe1
+--allow-assets image65.png` -> `71 of 72 identical + 1 allowed (image65.png ->
+img_037499090073.webp)`, everything else IDENTICAL. Against the re-baseline
+commit itself: 72 of 72, no allowance. An allowance that names an asset which
+did not change fails the run, so it cannot linger in a command line.
+
+**Not done, on purpose:** six more images here (`image1`, `image3`, `image30`,
+`image45`, `image48`, `image54`) are below the stricter 2x-of-1920 standard.
+They meet the 1920 floor, so they were not touched. Lifting them is a real
+option and a separate re-baseline.
+
 ## RESOLVED — the source deck and the parser (corrects the section below)
 
 **The two "open" items recorded below were both wrong. Left in place, struck
