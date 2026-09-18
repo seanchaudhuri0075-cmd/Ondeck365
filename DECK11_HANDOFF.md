@@ -1459,3 +1459,129 @@ The R2 prefix; League Gothic's woff2 and the one inherited Calibri run
 `validate.py`, `index.html`, `editor_roundtrip.py`; the off-site third copy of
 the sources. The mobile DOM sets its own type sizes, so the 30pt threshold
 must be re-checked there against rendered px, in a real browser, on a phone.
+
+---
+
+# STEP 13 -- render.py, DESKTOP ONLY, 2026-09-18
+
+**`out/unilever_shpc/index.html` exists (733 KB, gitignored). Local preview
+only: nothing uploaded, nothing published, no media in git. The mobile DOM is
+an empty, hidden `<main id="deck-mobile">`, reserved.** `f98972e` (the font
+decision) was pushed by Sean on 2026-09-17; this step's commit is local.
+
+## What was built
+
+`phase_1c/unilever_shpc/render.py` -- a new renderer. From Secret only the
+listed helpers, in shape: `run_css`, `para_html`, `box_style`, the
+srcRect-as-CSS-window crop, `rgba`, `deckkit.css` / `markup`, and the
+`p.t` strut lesson (every paragraph carries `line-height` = spcPct x
+SOURCE_LINE_HEIGHT AND its own `font-size`; an empty paragraph takes its
+nearest sized neighbour's, which is what STEP 11's autofit heights imply).
+No `plate_css` / `divider_css` / `header_css`, no `@media` reflow.
+
+* **Structure.** `<nav class="rail" hidden>` (editor slide names), `<main
+  id="deck-desktop">` with 35 `<section class="slide">`, `<main
+  id="deck-mobile" hidden>` empty. Canvas: `aspect-ratio:var(--ratio)` from
+  `p:sldSz`, `container-type:size`; every shape absolute at its authored
+  geometry, x/w in `cqw`, y/h in `cqh`, type in `cqw`. `#deck-desktop`
+  is the scroll container: `scroll-snap-type:y mandatory`, one
+  `scroll-snap-align:start` per slide, released below `MOBILE_BP` through
+  `dkcss.mobile_scroll_release`. No z-index inside the canvas (rule 21).
+* **Text.** `.L > .t` on any box holding a display run (>= 30pt): 49 boxes.
+  `.ci` on body runs -- never on a blank run or one with edge whitespace
+  (67 runs carry it, 0 violate). `.tlt` / `.tlb` on one-paragraph boxes
+  whose top edge sits in the top / bottom 15% of the canvas (7 / 34 -- the
+  running footer is the `.tlb` set). Headline runs in the lime accent also
+  carry `.lime`, the one span the editor re-wraps after an edit. Fonts are
+  `roles.sub_for(face, size, apple=)` exactly: 30pt+ leads with
+  `-apple-system, BlinkMacSystemFont`, under 30pt is `'Archivo wdth90'`
+  only, registered by an inlined `@font-face` from the committed woff2 --
+  `local(` appears nowhere. **League Gothic (slide 13, "STUNNING") and
+  Calibri (slide 35, ".") render with a visible fallback and a `<!-- TODO
+  font -->` + `data-font-todo` on the run.**
+* **Media.** `<img data-media>` for the 34 live pictures, srcRect crops as CSS
+  windows (slides 7, 30 x3), never baked. Fifty `<video preload="none"
+  playsinline poster=...>`: 49 clips + slide 26's GIF as a muted looping
+  clip over its frame-0 poster. `muted` and `loop` follow model.json (27
+  / 18, +1 each for the GIF). An IntersectionObserver rooted on
+  `#deck-desktop` plays an `auto` clip at >= 50% visibility and pauses
+  anything leaving; an auto clip the author did NOT mute (16) still starts
+  muted, with a "tap for sound" control. The 6 `click` clips (slides 14,
+  21 x4, 29) sit on their poster behind a play control and play WITH sound
+  on click. `?noplay` in the URL keeps every clip on its poster (QA only).
+  URLs are `MEDIA_BASE + "assets/" + file`; `MEDIA_BASE = ""`.
+* **Two departures from "the authored box", both measured first.**
+  1. 22 `wrap="square"` text boxes overhang the canvas's RIGHT edge by 2-43pt
+     (slides 2, 3, 5-8, 10, 11, 13, 15, 34). Their wrap width is clamped at
+     the edge: Archivo (3.4% narrower) had pulled "formats" up onto slide 2's
+     first line and into the clip. Checked with the shipped woff2 on all 22:
+     no SF Pro line exceeds the clamped width, so nothing wraps anew, and
+     slide 2 now breaks where SF Pro did. Left overhang (the footer at
+     -16.4pt on 27 slides, centred) is left as authored.
+  2. Pictures are `object-fit:fill`, not `cover`: PowerPoint stretches an
+     uncropped picture to its box. Only slide 33 is affected (a group scaled
+     5% wider than its children); LibreOffice draws it stretched too. That
+     slide's divergence went 25.5 -> 7.8.
+* **Occluded shapes.** The built model flags FOUR shapes on slide 14 as
+  `occluded` (two logos, two text boxes under the full-bleed click-to-play
+  film). Reconnaissance section 7 said "none"; the model is right, they are
+  invisible in the source, and `roles.SUPPRESS_OCCLUDED_SHAPES` drops them:
+  264 of 268 shapes are emitted. validate.py counts against the model less
+  what roles suppresses.
+
+## validate.py -- 30 assertions, all pass
+
+Structure (35 sections, ids s1..s35, one `class="slide"` per source slide,
+#deck-mobile empty), 264 live shapes, 50 `<video>` incl. the GIF, **per-slide
+text equal to model.json after entity decoding** (32 slides carry `&`),
+every referenced file present in `assets/` (105), data-media on every
+picture, crops as CSS, preload/poster/playback/muted/loop as above, no
+`local(`, Archivo @font-face inlined, **stacks follow roles (0 spans
+disagree)**, the two pending faces flagged, no `.ci` on edge-whitespace runs,
+no z-index, no hardcoded aspect, cqw/cqh geometry, snap present and released
+below the breakpoint, every `p.t` sized.
+
+## Screenshots -- regression signal, not a fidelity gate
+
+`validate.py --shots`: the QA document (`build_html(apple=False)`, i.e.
+the Archivo path, per section 4's rule -- untouched, this Mac would show the
+system font on every display run) served locally, `?noplay`, headless Chrome
+at 1920x1080 per slide, against LibreOffice's PDF of a **video-stripped copy**
+of the source (the 49 mp4/mov parts emptied; 104 MB instead of 1.57 GB;
+LibreOffice draws the posters, and has no SF Pro). Mean |grey difference| at
+960x540, 0-255:
+
+| slide | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 |
+|:--|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| diff | 2.6 | 10.7 | 11.6 | 12.2 | 9.0 | 5.3 | 7.4 | 4.7 | 1.8 | 4.9 | 4.9 | 1.6 | 5.5 | 2.1 | 10.2 | 3.7 | 4.7 | 2.0 |
+
+| slide | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34 | 35 |
+|:--|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| diff | 3.6 | 4.3 | 7.5 | 4.6 | 3.9 | 4.0 | 5.0 | **67.0** | 2.6 | 1.8 | 4.4 | 5.5 | 3.7 | 4.0 | 7.8 | 7.7 | 3.8 |
+
+**Worst five: 26 (67.0), 4 (12.2), 3 (11.6), 2 (10.7), 15 (10.2).** Slide 26 is
+LibreOffice drawing NOTHING where the animated GIF is (Chrome shows the
+clip's poster) -- a LibreOffice limitation, not a defect. 2-4 are the diagram
+slides: 15-20pt copy in Archivo 600/500 against LibreOffice's Helvetica-class
+substitute, so every glyph differs a little; 15 is the eight-line 35pt
+statement, same cause at display size. Before `?noplay` the autoplaying
+clips were caught on their first frames (28 at 178.7, 31 at 122.9) -- that
+is what the flag is for.
+
+Kept beside the page: `~/DeckBuild/unilever_shpc/validate/` (chrome/,
+lo/slim.pptx + slim.pdf + p-NN.png, pair_NN.png side-by-sides).
+
+## Served
+
+    python3 -m http.server 60253 --bind 127.0.0.1 --directory out/unilever_shpc
+    http://127.0.0.1:60253/index.html          (shipped stack: Apple path on this Mac)
+
+## Still open
+
+The mobile DOM (and its type sizes, which re-open the 30pt threshold on a
+phone); the load half of 7.6 is done for desktop by the observer but the
+mobile DOM needs its own; the editor sees 0 images until `MEDIA_BASE` is
+absolute (section 6); `editor_roundtrip.py`; League Gothic + Calibri; the R2
+prefix; the off-site third copy. The Deck Editor rewrites a video's attributes
+to `autoplay muted loop` only when its src is edited -- a click-to-play clip
+edited there would lose its `data-playback` behaviour; noted, not handled.
